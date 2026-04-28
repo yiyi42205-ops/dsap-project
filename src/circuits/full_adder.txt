@@ -1,0 +1,17 @@
+# 全加器 (Full Adder) 電路描述檔
+# 格式說明：
+#   INPUT <名稱1> <名稱2> ...     定義輸入訊號
+#   OUTPUT <名稱1> <名稱2> ...    定義輸出訊號
+#   GATE <類型> <名稱> <輸入1> <輸入2> ... -> <輸出>
+
+INPUT A B Cin
+OUTPUT S Cout
+
+# S = A XOR B XOR Cin
+GATE XOR XOR_1 A B -> W1
+GATE XOR XOR_2 W1 Cin -> S
+
+# Cout = (A AND B) OR (Cin AND (A XOR B))
+GATE AND AND_1 A B -> W2
+GATE AND AND_2 W1 Cin -> W3
+GATE OR  OR_1  W2 W3 -> Cout

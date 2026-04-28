@@ -1,0 +1,10 @@
+# 半加器 (Half Adder) 電路描述檔
+
+INPUT A B
+OUTPUT S C
+
+# S = A XOR B
+GATE XOR XOR_1 A B -> S
+
+# C = A AND B
+GATE AND AND_1 A B -> C
