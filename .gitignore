@@ -1,4 +1,4 @@
-# Compiled
+# Compiled binaries
 *.o
 *.obj
 *.exe
@@ -7,6 +7,18 @@
 *.so
 *.dll
 *.dylib
+
+# Project-specific compiled outputs
+simulator
+src/benchmarks/hash_vs_linear
+src/benchmarks/topo_vs_naive
+src/benchmarks/ordered_vs_unordered
+tests/test_truth_table
+tests/test_edge_cases
+tests/test_topo_consistency
+
+# Benchmark results (generated data, not source)
+src/benchmarks/results/
 
 # Build directories
 build/

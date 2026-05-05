@@ -1,0 +1,11 @@
+# 2-to-1 多工器 (MUX) 電路描述檔
+# Y = (NOT Sel AND A) OR (Sel AND B)
+# 白話：Sel=0 時選 A，Sel=1 時選 B
+
+INPUT A B Sel
+OUTPUT Y
+
+GATE NOT NOT_1 Sel -> NotSel
+GATE AND AND_1 NotSel A -> W1
+GATE AND AND_2 Sel B -> W2
+GATE OR  OR_1  W1 W2 -> Y
