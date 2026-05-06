@@ -13,9 +13,30 @@ try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    import matplotlib.font_manager as fm
 except ImportError:
     print("請先安裝 matplotlib：pip3 install matplotlib")
     sys.exit(1)
+
+# ── 中文字型設定 ─────────────────────────────────────────────
+# 優先嘗試 macOS 內建字型，再 fallback 到 Linux 字型
+_ZH_FONT_CANDIDATES = [
+    "Heiti TC",       # macOS（黑體-繁）
+    "Songti SC",      # macOS（宋體-簡）
+    "PingFang SC",    # macOS（蘋方，需從字型快取搜尋）
+    "STHeiti",        # macOS 舊版
+    "WenQuanYi Micro Hei",  # Linux
+    "SimHei",         # Windows
+]
+_available = {f.name for f in fm.fontManager.ttflist}
+_chosen = next((f for f in _ZH_FONT_CANDIDATES if f in _available), None)
+
+if _chosen:
+    matplotlib.rcParams["font.family"] = [_chosen, "DejaVu Sans"]
+    matplotlib.rcParams["axes.unicode_minus"] = False  # 負號正常顯示
+else:
+    print("  [字型] 找不到中文字型，圖表標籤可能顯示為方塊。"
+          " 建議：brew install font-noto-sans-cjk-tc")
 
 RESULTS = "results"
 
@@ -156,9 +177,77 @@ def plot_ordered_vs_unordered():
     print(f"  Saved: {out}")
 
 
+# ── 4. random_circuit_bench（log-log，含 error bar）────────────
+def plot_random_circuit_loglog():
+    rows = load_csv("random_circuit_bench.csv")
+    if rows is None:
+        return
+
+    try:
+        import numpy as np
+    except ImportError:
+        print("  [skip] log-log 圖需要 numpy：pip3 install numpy")
+        return
+
+    # 以 scale 分組，聚合 10 個電路的均值
+    from collections import defaultdict
+    bfs_by_scale = defaultdict(list)
+    dfs_by_scale = defaultdict(list)
+    for r in rows:
+        s = int(r["scale"])
+        bfs_by_scale[s].append(float(r["bfs_mean_ns"]))
+        dfs_by_scale[s].append(float(r["dfs_mean_ns"]))
+
+    scales = sorted(bfs_by_scale.keys())
+    bfs_means = np.array([np.mean(bfs_by_scale[s]) for s in scales]) / 1000  # ns → μs
+    bfs_stds  = np.array([np.std(bfs_by_scale[s])  for s in scales]) / 1000
+    dfs_means = np.array([np.mean(dfs_by_scale[s]) for s in scales]) / 1000
+    dfs_stds  = np.array([np.std(dfs_by_scale[s])  for s in scales]) / 1000
+    scales_arr = np.array(scales, dtype=float)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    ax.errorbar(scales_arr, bfs_means, yerr=bfs_stds,
+                marker="o", linewidth=2, capsize=4,
+                label="BFS (Kahn's Algorithm)", color="steelblue")
+    ax.errorbar(scales_arr, dfs_means, yerr=dfs_stds,
+                marker="s", linewidth=2, capsize=4,
+                label="DFS (反向後序遍歷)", color="tomato")
+
+    # O(N) 參考線（以最小規模的 BFS 均值為錨點）
+    ref_x = np.array([scales_arr[0], scales_arr[-1]])
+    ref_y = bfs_means[0] * ref_x / scales_arr[0]
+    ax.plot(ref_x, ref_y, "--", color="gray", alpha=0.5, linewidth=1.5,
+            label="O(N) 參考線")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Gate 數量（log 軸）", fontsize=12)
+    ax.set_ylabel("每次排序耗時 μs（log 軸）", fontsize=12)
+    ax.set_title("BFS vs DFS 拓撲排序：Log-Log 效能圖\n"
+                 "（error bar = 10 個隨機電路的標準差）", fontsize=12)
+    ax.legend(fontsize=10)
+    ax.grid(True, which="both", alpha=0.3)
+
+    # 標注各規模的 BFS/DFS 比值
+    for s, bm, dm in zip(scales_arr, bfs_means, dfs_means):
+        ratio = bm / dm
+        ax.annotate(f"{ratio:.2f}x",
+                    xy=(s, max(bm, dm)),
+                    xytext=(0, 8), textcoords="offset points",
+                    ha="center", fontsize=8, color="purple")
+
+    plt.tight_layout()
+    out = os.path.join(RESULTS, "bfs_vs_dfs_loglog.png")
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+
+
 if __name__ == "__main__":
     print("=== Benchmark Plot Generator ===\n")
     plot_hash_vs_linear()
     plot_topo_vs_naive()
     plot_ordered_vs_unordered()
+    plot_random_circuit_loglog()
     print("\nDone. 圖片存在 results/ 目錄下。")

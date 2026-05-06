@@ -132,6 +132,134 @@ Prototype 階段預計完成以下可驗證的功能：
 
 ### 專案說明
 
+本專題實作了一個 C++ 命令列數位邏輯電路模擬器，以「用電路學資料結構」為核心定位：
+電路本身是一個 **有向無環圖（DAG）**，模擬器透過**拓撲排序**決定邏輯閘的計算順序，
+讓使用者能清楚看到演算法如何驅動硬體模擬。
+
+**最終實作的功能：**
+
+| 功能 | 說明 |
+|------|------|
+| 6 種邏輯閘 | AND / OR / NOT / XOR / NAND / NOR，OOP 繼承 + 虛擬函式 |
+| 電路描述檔解析 | 自訂 `.txt` 格式，支援 INPUT / OUTPUT / GATE 關鍵字 |
+| BFS 拓撲排序 | Kahn's Algorithm，O(V+E)，deque + inDegree map |
+| DFS 拓撲排序 | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK） |
+| 迴圈偵測 | BFS 和 DFS 均支援，5 種不同拓撲的迴圈測試 |
+| 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
+| `--trace` 模式 | 逐步印出 BFS / DFS 排序的每一步決策 |
+| 效能比較 | BFS vs DFS 拓撲排序時間，含平均值和標準差 |
+| Ablation Study | 3 組資料結構對照實驗（Hash Map / 拓撲排序 / Map 選擇）|
+| 嚴謹 benchmark | 隨機 DAG，100 warm-up + 1000 測量，log-log 圖 |
+| 病態測試 | deep_chain / wide_fanout / dense_circuit + 5 個迴圈案例 |
+
+---
+
 ### 使用方式
 
+#### 編譯
+
+```bash
+make          # 編譯主程式（生成 ./simulator）
+make test     # 執行所有 unit tests（15 個測試）
+```
+
+#### 互動式選單模式
+
+```bash
+./simulator
+```
+
+選單選項：
+1. 半加器（2 閘）
+2. 全加器（5 閘）
+3. 2-to-1 MUX（4 閘）
+4. 4-bit 加法器（20 閘）
+5. 從檔案載入
+6. 效能比較模式（比較所有內建電路）
+
+#### 從檔案載入
+
+```bash
+./simulator src/circuits/full_adder.txt
+```
+
+輸出：電路資訊 → 拓撲排序順序 → 真值表 → BFS vs DFS 效能比較
+
+#### `--trace` 模式（逐步追蹤）
+
+```bash
+./simulator --trace src/circuits/full_adder.txt
+```
+
+BFS trace 輸出範例：
+```
+[BFS Trace] 初始佇列（indegree=0 的閘）: [XOR_1, AND_1]
+
+==========
+Step 1: Pop XOR_1 (XOR gate)
+  Current queue: [AND_1]
+  Current indegree: {AND_2:1, OR_1:2, XOR_2:1}
+  XOR_1 outputs to: [XOR_2, AND_2]
+  → XOR_2 indegree 1→0, push to queue
+  → AND_2 indegree 1→0, push to queue
+==========
+```
+
+DFS trace 輸出範例：
+```
+→ Entering XOR_1 (XOR) [WHITE→GRAY, depth=0]
+  → Entering XOR_2 (XOR) [WHITE→GRAY, depth=1]
+  ← Finishing XOR_2 (XOR) [GRAY→BLACK, depth=1]
+  → Entering AND_2 (AND) [WHITE→GRAY, depth=1]
+    → Entering OR_1 (OR) [WHITE→GRAY, depth=2]
+    ← Finishing OR_1 (OR) [GRAY→BLACK, depth=2]
+  ← Finishing AND_2 (AND) [GRAY→BLACK, depth=1]
+← Finishing XOR_1 (XOR) [GRAY→BLACK, depth=0]
+```
+
+> 注意：`--trace` 模式下跳過真值表和效能比較，建議用於小型電路（< 20 閘）。
+
+#### 執行 Benchmark（任務 D / B）
+
+```bash
+make bench_random    # 嚴謹 BFS vs DFS（100 warm-up + 1000 測量）
+make benchmarks      # 執行 Ablation Study 三組實驗
+make plot            # 生成所有圖表（含 log-log 圖）
+```
+
+#### 執行病態測試
+
+```bash
+# 1000 NOT 串聯（deep chain）
+./simulator examples/stress_tests/deep_chain.txt
+
+# 1999 閘高扇出
+./simulator examples/stress_tests/wide_fanout.txt
+
+# 50 閘高密度（edge/gate ≈ 8.4）
+./simulator examples/stress_tests/dense_circuit.txt
+
+# 迴圈偵測（應輸出 ERROR）
+./simulator examples/stress_tests/cycle_detection_cases/simple_loop.txt
+./simulator examples/stress_tests/cycle_detection_cases/self_loop.txt
+./simulator examples/stress_tests/cycle_detection_cases/triple_ring.txt
+./simulator examples/stress_tests/cycle_detection_cases/compound_cycle.txt
+./simulator examples/stress_tests/cycle_detection_cases/nested_cycles.txt
+```
+
+---
+
 ### 與課程的關聯總結
+
+| 課程概念 | 在本專題中的體現 |
+|----------|----------------|
+| **有向無環圖（DAG）** | 電路本身的資料結構：邏輯閘為節點，連線為有向邊 |
+| **拓撲排序（BFS/DFS）** | 決定閘的計算順序，兩種演算法的完整實作與比較 |
+| **雜湊表（Hash Map）** | `unordered_map` 儲存訊號值，O(1) 查詢；Ablation Study 實驗一 |
+| **平衡二元搜尋樹（BST）** | `map` vs `unordered_map` 的正確性與效能取捨；Ablation Study 實驗三 |
+| **佇列（Queue）** | BFS 的核心資料結構，`deque` 實作 |
+| **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；結果反轉用 `stack<Gate*>` |
+| **OOP / 繼承 / 多型** | `Gate` 基底類別 → `AndGate`、`OrGate` 等子類別，虛擬函式 `compute()` |
+| **演算法複雜度分析** | O(V+E) vs O(V²) 的理論分析與實測驗證；log-log 圖呈現 |
+| **迴圈偵測（三色標記）** | DFS 的 WHITE/GRAY/BLACK 標記，back edge 偵測 |
+| **統計測量** | warm-up / 正式測量 / 均值 / 標準差，避免系統排程抖動影響 |

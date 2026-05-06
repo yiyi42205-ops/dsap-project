@@ -1,0 +1,82 @@
+# dense_circuit.txt — 密集交叉連接電路（高 edge density）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 目的：壓力測試 O(V+E) 中 E >> V 的情況
+#
+# 結構：5 層，每層 10 個 gate，共 50 個 gate
+#   Layer 1：每個 gate 取 2 個鄰近的 primary input（fan-in = 2）
+#   Layer 2-5：每個 gate 取上一層 ALL 10 個輸出（fan-in = 10）
+#
+# 邊數估計：
+#   L1→L2：10 gates × 10 inputs = 100 edges
+#   L2→L3：10 × 10 = 100 edges
+#   L3→L4：10 × 10 = 100 edges
+#   L4→L5：10 × 10 = 100 edges
+#   Layer1 的 primary input 邊：10 × 2 = 20 edges
+#   總計：~420 edges for 50 gates（edge/gate 比 ≈ 8.4）
+#   vs. 典型電路（如全加器）edge/gate ≈ 1.5
+#
+# 在拓撲排序的 adj 遍歷中，高 edge density 使 O(V+E) 中的 E 項主導
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+INPUT IN_0 IN_1 IN_2 IN_3 IN_4 IN_5 IN_6 IN_7 IN_8 IN_9
+OUTPUT R5_0 R5_1 R5_2 R5_3 R5_4 R5_5 R5_6 R5_7 R5_8 R5_9
+
+# ── Layer 1：fan-in = 2（相鄰 primary inputs，wraparound）─────
+GATE AND  L1_0 IN_0 IN_1 -> R1_0
+GATE OR   L1_1 IN_1 IN_2 -> R1_1
+GATE XOR  L1_2 IN_2 IN_3 -> R1_2
+GATE NAND L1_3 IN_3 IN_4 -> R1_3
+GATE NOR  L1_4 IN_4 IN_5 -> R1_4
+GATE AND  L1_5 IN_5 IN_6 -> R1_5
+GATE OR   L1_6 IN_6 IN_7 -> R1_6
+GATE XOR  L1_7 IN_7 IN_8 -> R1_7
+GATE NAND L1_8 IN_8 IN_9 -> R1_8
+GATE NOR  L1_9 IN_9 IN_0 -> R1_9
+
+# ── Layer 2：fan-in = 10（all of Layer 1）─────────────────────
+GATE AND  L2_0 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_0
+GATE OR   L2_1 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_1
+GATE XOR  L2_2 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_2
+GATE NAND L2_3 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_3
+GATE NOR  L2_4 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_4
+GATE AND  L2_5 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_5
+GATE OR   L2_6 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_6
+GATE XOR  L2_7 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_7
+GATE NAND L2_8 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_8
+GATE NOR  L2_9 R1_0 R1_1 R1_2 R1_3 R1_4 R1_5 R1_6 R1_7 R1_8 R1_9 -> R2_9
+
+# ── Layer 3：fan-in = 10（all of Layer 2）─────────────────────
+GATE AND  L3_0 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_0
+GATE OR   L3_1 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_1
+GATE XOR  L3_2 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_2
+GATE NAND L3_3 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_3
+GATE NOR  L3_4 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_4
+GATE AND  L3_5 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_5
+GATE OR   L3_6 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_6
+GATE XOR  L3_7 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_7
+GATE NAND L3_8 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_8
+GATE NOR  L3_9 R2_0 R2_1 R2_2 R2_3 R2_4 R2_5 R2_6 R2_7 R2_8 R2_9 -> R3_9
+
+# ── Layer 4：fan-in = 10（all of Layer 3）─────────────────────
+GATE AND  L4_0 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_0
+GATE OR   L4_1 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_1
+GATE XOR  L4_2 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_2
+GATE NAND L4_3 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_3
+GATE NOR  L4_4 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_4
+GATE AND  L4_5 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_5
+GATE OR   L4_6 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_6
+GATE XOR  L4_7 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_7
+GATE NAND L4_8 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_8
+GATE NOR  L4_9 R3_0 R3_1 R3_2 R3_3 R3_4 R3_5 R3_6 R3_7 R3_8 R3_9 -> R4_9
+
+# ── Layer 5：fan-in = 10（all of Layer 4）─────────────────────
+GATE AND  L5_0 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_0
+GATE OR   L5_1 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_1
+GATE XOR  L5_2 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_2
+GATE NAND L5_3 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_3
+GATE NOR  L5_4 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_4
+GATE AND  L5_5 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_5
+GATE OR   L5_6 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_6
+GATE XOR  L5_7 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_7
+GATE NAND L5_8 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_8
+GATE NOR  L5_9 R4_0 R4_1 R4_2 R4_3 R4_4 R4_5 R4_6 R4_7 R4_8 R4_9 -> R5_9

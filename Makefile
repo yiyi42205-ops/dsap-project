@@ -6,7 +6,8 @@ RESULTS  = src/benchmarks/results
 TESTS    = tests
 
 # ── 預設目標 ─────────────────────────────────────────────────────
-.PHONY: all main benchmarks bench_hash bench_topo bench_ordered plot test clean
+.PHONY: all main benchmarks bench_hash bench_topo bench_ordered bench_random \
+        plot test clean
 
 all: main
 
@@ -31,6 +32,12 @@ bench_ordered:
 	$(CXX) $(CXXFLAGS) $(BENCH)/ordered_vs_unordered.cpp -o $(BENCH)/ordered_vs_unordered
 	mkdir -p $(RESULTS)
 	cd $(BENCH) && ./ordered_vs_unordered
+
+# ── 任務 D：嚴謹 BFS vs DFS 效能測試（隨機電路）────────────────
+bench_random:
+	$(CXX) $(CXXFLAGS) $(BENCH)/random_circuit_gen.cpp   -o $(BENCH)/random_circuit_gen
+	mkdir -p $(RESULTS)
+	cd $(BENCH) && ./random_circuit_gen
 
 plot:
 	cd $(BENCH) && python3 plot.py
@@ -66,6 +73,7 @@ clean:
 	      $(BENCH)/hash_vs_linear \
 	      $(BENCH)/topo_vs_naive \
 	      $(BENCH)/ordered_vs_unordered \
+	      $(BENCH)/random_circuit_gen \
 	      $(TESTS)/test_truth_table \
 	      $(TESTS)/test_edge_cases \
 	      $(TESTS)/test_topo_consistency

@@ -1,0 +1,9 @@
+# self_loop.txt — 自環（gate 以自己的輸出作為輸入）
+# 形狀：SELF_AND.output = wire_out，input 也是 wire_out
+# 這是最極端的迴圈：長度 = 1
+# BFS 偵測：SELF_AND 的 inDegree 初始化時包含自身（wire_out 是自己的 output）
+#           → indegree = 1，永遠不進佇列 → bfsOrder.size() = 0 ≠ 1
+# DFS 偵測：adj[SELF_AND] 包含 SELF_AND 自身
+#           → 訪問自身時 state = GRAY，再次進入 → 立即偵測 back edge
+
+GATE AND SELF_AND wire_out wire_out -> wire_out

@@ -1,0 +1,14 @@
+# triple_ring.txt — 3-gate 環形迴圈
+# 形狀：wire_A → G_BC → wire_B → G_CA → wire_C → G_AB → wire_A
+# 這是驗證三色標記法的經典案例：
+#   1. DFS 從 G_AB 出發（GRAY）
+#   2. G_AB 的 adj 包含 G_BC（G_AB 輸出 wire_A，G_BC 以 wire_A 為輸入）
+#   3. 進入 G_BC（GRAY），adj 包含 G_CA
+#   4. 進入 G_CA（GRAY），adj 包含 G_AB
+#   5. G_AB 已是 GRAY → 發現 back edge，偵測到迴圈
+#
+# BFS 偵測：三個閘互相依賴，所有 indegree >= 1，佇列永遠為空 → 偵測失敗
+
+GATE AND G_AB wire_C wire_C -> wire_A
+GATE AND G_BC wire_A wire_A -> wire_B
+GATE AND G_CA wire_B wire_B -> wire_C

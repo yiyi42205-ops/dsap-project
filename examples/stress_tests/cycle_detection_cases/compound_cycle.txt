@@ -1,0 +1,21 @@
+# compound_cycle.txt — 合法前綴 + 獨立迴圈並存
+# 結構：兩個分離的子電路
+#   子電路 1（合法 DAG）：INPUT A B → G1 → G2 → G3，無迴圈
+#   子電路 2（迴圈）：CYC_A ↔ CYC_B，2-gate 環
+#
+# 這測試：BFS 和 DFS 都能在合法子電路存在的情況下，
+#         仍然正確偵測出另一個子電路中的迴圈
+#
+# BFS 結果：G1、G2 能進入排序，G3 能進入，但 CYC_A 和 CYC_B 的 indegree 永不為 0
+#           → bfsOrder.size() = 3 ≠ gates.size() = 5 → 偵測到迴圈
+# DFS 結果：DFS 遍歷合法閘後，從 CYC_A 出發 → GRAY → 訪問 CYC_B → GRAY
+#           → CYC_B 的 adj 包含 CYC_A（GRAY）→ 發現 back edge
+
+INPUT A B
+GATE AND G1 A B -> W1
+GATE OR  G2 A W1 -> W2
+GATE XOR G3 W1 W2 -> W3
+
+# 以下兩個閘形成獨立的 2-gate 迴圈（與上方電路無連線）
+GATE NOT CYC_A wire_b -> wire_a
+GATE NOT CYC_B wire_a -> wire_b

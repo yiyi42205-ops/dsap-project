@@ -80,16 +80,57 @@ int main(int argc, char* argv[]) {
     std::cout << "║  Digital Logic Circuit Simulator     ║\n";
     std::cout << "╚══════════════════════════════════════╝\n\n";
 
-    if (argc > 1) {
-        std::string filename = argv[1];
-        std::cout << "從檔案載入電路：" << filename << "\n";
+    // ── 解析命令列引數 ───────────────────────────────────────
+    bool traceMode = false;
+    int  maxSteps  = -1;   // -1 = 無限制
+    std::string fileArg = "";
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--trace") {
+            traceMode = true;
+        } else if (arg == "--max-steps" && i + 1 < argc) {
+            try {
+                maxSteps = std::stoi(argv[++i]);
+                if (maxSteps < 0) { std::cerr << "錯誤：--max-steps 必須為非負整數\n"; return 1; }
+            } catch (...) {
+                std::cerr << "錯誤：--max-steps 的引數不是有效整數：" << argv[i] << "\n";
+                return 1;
+            }
+        } else {
+            fileArg = arg;
+        }
+    }
+
+    if (!fileArg.empty()) {
+        std::cout << "從檔案載入電路：" << fileArg << "\n";
         Circuit circuit;
-        if (!circuit.loadFromFile(filename)) return 1;
-        if (!circuit.topologicalSort())      return 1;
-        circuit.printInfo();
-        std::cout << "=== 真值表 ===\n";
-        circuit.generateTruthTable();
-        circuit.performanceComparison();
+        if (!circuit.loadFromFile(fileArg)) return 1;
+
+        if (traceMode) {
+            // ── 追蹤模式：逐步印出排序過程 ───────────────────
+            std::cout << "\n";
+            std::cout << "╔══════════════════════════════════════════════════════╗\n";
+            std::cout << "║  --trace 模式：BFS (Kahn's Algorithm) 追蹤          ║\n";
+            std::cout << "╚══════════════════════════════════════════════════════╝\n\n";
+            if (!circuit.topologicalSortBFS(true, maxSteps)) return 1;
+
+            std::cout << "\n";
+            std::cout << "╔══════════════════════════════════════════════════════╗\n";
+            std::cout << "║  --trace 模式：DFS (反向後序遍歷) 追蹤              ║\n";
+            std::cout << "╚══════════════════════════════════════════════════════╝\n\n";
+            if (!circuit.topologicalSortDFS(true, maxSteps)) return 1;
+
+            std::cout << "\n（追蹤模式下跳過真值表與效能比較，避免輸出過多）\n";
+            if (maxSteps >= 0)
+                std::cout << "已套用 --max-steps " << maxSteps << "：超過此步數後排序繼續但不再印出。\n";
+            std::cout << "若需完整輸出，請不加 --trace 旗標執行。\n";
+        } else {
+            if (!circuit.topologicalSort()) return 1;
+            circuit.printInfo();
+            std::cout << "=== 真值表 ===\n";
+            circuit.generateTruthTable();
+            circuit.performanceComparison();
+        }
         return 0;
     }
 

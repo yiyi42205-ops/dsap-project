@@ -1,3 +1,4 @@
+
 #pragma once
 // circuit.h ── Gate / Circuit 類別定義（header-only）
 // 由 main.cpp 和 tests/ 共同 include，確保單一事實來源。
@@ -145,7 +146,7 @@ public:
     }
 
     // ── BFS 拓撲排序 (Kahn's Algorithm) O(V+E) ──────────────
-    bool topologicalSortBFS() {
+    bool topologicalSortBFS(bool trace = false, int max_steps = -1) {
         bfsOrder.clear();
 
         std::unordered_map<std::string, Gate*> signalSource;
@@ -163,26 +164,103 @@ public:
                 if (signalSource.count(inp))
                     adj[signalSource[inp]].push_back(g.get());
 
-        std::queue<Gate*> q;
+        // 使用 deque 取代 queue，支援 trace 模式下的隨機存取迭代
+        // std::queue 底層預設即為 deque，時間複雜度相同
+        std::deque<Gate*> q;
         for (auto& g : gates)
-            if (inDegree[g.get()] == 0) q.push(g.get());
+            if (inDegree[g.get()] == 0) q.push_back(g.get());
 
+        if (trace) {
+            std::cout << "[BFS Trace] 初始佇列（indegree=0 的閘）: [";
+            for (int i = 0; i < (int)q.size(); i++) {
+                if (i > 0) std::cout << ", ";
+                std::cout << q[i]->name;
+            }
+            std::cout << "]\n\n";
+        }
+
+        int step = 0;
+        bool bfs_truncated = false;
         while (!q.empty()) {
-            Gate* cur = q.front(); q.pop();
+            step++;
+            Gate* cur = q.front(); q.pop_front();
             bfsOrder.push_back(cur);
-            for (Gate* nxt : adj[cur])
-                if (--inDegree[nxt] == 0) q.push(nxt);
+
+            // max_steps 限制：超過後繼續排序但停止印出
+            if (trace && max_steps >= 0 && step == max_steps + 1 && !bfs_truncated) {
+                std::cout << "... （已達 --max-steps " << max_steps
+                          << "，後續步驟省略，排序仍繼續完成）\n\n";
+                bfs_truncated = true;
+            }
+
+            if (trace && !bfs_truncated) {
+                std::cout << "==========\n";
+                std::cout << "Step " << step << ": Pop " << cur->name
+                          << " (" << cur->type << " gate)\n";
+
+                // 印出佇列目前狀態（pop 之後）
+                std::cout << "  Current queue: [";
+                for (int i = 0; i < (int)q.size(); i++) {
+                    if (i > 0) std::cout << ", ";
+                    std::cout << q[i]->name;
+                }
+                std::cout << "]\n";
+
+                // 印出尚未完成的 indegree（只顯示 > 0 的）
+                std::cout << "  Current indegree: {";
+                bool firstDeg = true;
+                for (auto& [gp, deg] : inDegree) {
+                    if (deg > 0) {
+                        if (!firstDeg) std::cout << ", ";
+                        std::cout << gp->name << ":" << deg;
+                        firstDeg = false;
+                    }
+                }
+                std::cout << "}\n";
+
+                std::cout << "  " << cur->name << " outputs to: [";
+                const auto& nbrs = adj[cur];
+                for (int i = 0; i < (int)nbrs.size(); i++) {
+                    if (i > 0) std::cout << ", ";
+                    std::cout << nbrs[i]->name;
+                }
+                std::cout << "]\n";
+            }
+
+            for (Gate* nxt : adj[cur]) {
+                int old_deg = inDegree[nxt];
+                --inDegree[nxt];
+                if (inDegree[nxt] == 0) {
+                    q.push_back(nxt);
+                    if (trace && !bfs_truncated) {
+                        std::cout << "  → " << nxt->name << " indegree "
+                                  << old_deg << "→0, push to queue\n";
+                    }
+                } else {
+                    if (trace && !bfs_truncated) {
+                        std::cout << "  → " << nxt->name << " indegree "
+                                  << old_deg << "→" << inDegree[nxt] << "\n";
+                    }
+                }
+            }
+
+            if (trace && !bfs_truncated) std::cout << "==========\n\n";
         }
 
         if (bfsOrder.size() != gates.size()) {
             std::cerr << "錯誤：電路中存在迴圈（BFS 偵測）！" << std::endl;
             return false;
         }
+        if (trace) {
+            std::cout << "[BFS Trace] 排序完成。執行順序：";
+            for (auto* g : bfsOrder) std::cout << g->name << " ";
+            std::cout << "\n";
+        }
         return true;
     }
 
     // ── DFS 拓撲排序（反向後序遍歷）O(V+E) ──────────────────
-    bool topologicalSortDFS() {
+    bool topologicalSortDFS(bool trace = false, int max_steps = -1) {
         dfsOrder.clear();
 
         std::unordered_map<std::string, Gate*> signalSource;
@@ -194,22 +272,67 @@ public:
                 if (signalSource.count(inp))
                     adj[signalSource[inp]].push_back(g.get());
 
-        // 三態：0=未訪問 / 1=訪問中 / 2=已完成
+        // 三態：0=WHITE（未訪問）/ 1=GRAY（訪問中）/ 2=BLACK（已完成）
         std::unordered_map<Gate*, int> state;
         for (auto& g : gates) state[g.get()] = 0;
 
         std::stack<Gate*> resultStack;
         bool hasCycle = false;
+        int depth = 0;
+        int dfs_visit_count = 0;   // 追蹤已印出的節點數，供 max_steps 使用
+        bool dfs_truncated = false;
+
+        if (trace) {
+            std::cout << "[DFS Trace] 從所有 WHITE 節點開始遞迴 DFS...\n"
+                      << "  顏色說明：WHITE=未訪問 / GRAY=訪問中（在當前遞迴堆疊上）/ BLACK=已完成\n"
+                      << "  → 表示進入（WHITE→GRAY），← 表示完成（GRAY→BLACK）\n\n";
+        }
 
         std::function<void(Gate*)> dfs = [&](Gate* node) {
             if (hasCycle) return;
-            state[node] = 1;
-            for (Gate* nxt : adj[node]) {
-                if (state[nxt] == 1) { hasCycle = true; return; }
-                if (state[nxt] == 0) dfs(nxt);
+            state[node] = 1; // GRAY
+            dfs_visit_count++;
+
+            // max_steps 限制：進入第 max_steps+1 個節點時印出截斷訊息
+            if (trace && max_steps >= 0 && dfs_visit_count == max_steps + 1 && !dfs_truncated) {
+                std::string indent(depth * 2, ' ');
+                std::cout << indent << "... （已達 --max-steps " << max_steps
+                          << "，後續節點省略，排序仍繼續完成）\n\n";
+                dfs_truncated = true;
             }
-            state[node] = 2;
+
+            if (trace && !dfs_truncated) {
+                std::string indent(depth * 2, ' ');
+                std::cout << indent << "→ Entering " << node->name
+                          << " (" << node->type << ") [WHITE→GRAY, depth=" << depth << "]\n";
+            }
+            depth++;
+
+            for (Gate* nxt : adj[node]) {
+                if (state[nxt] == 1) {
+                    // Back edge：發現迴圈
+                    hasCycle = true;
+                    if (trace && !dfs_truncated) {
+                        std::string indent(depth * 2, ' ');
+                        std::cout << indent << "!! Back edge: " << node->name
+                                  << " → " << nxt->name
+                                  << " （" << nxt->name << " 目前為 GRAY）[CYCLE DETECTED]\n";
+                    }
+                    return;
+                }
+                if (state[nxt] == 0) dfs(nxt);
+                if (hasCycle) return;
+            }
+
+            depth--;
+            state[node] = 2; // BLACK
             resultStack.push(node);
+
+            if (trace && !dfs_truncated) {
+                std::string indent(depth * 2, ' ');
+                std::cout << indent << "← Finishing " << node->name
+                          << " (" << node->type << ") [GRAY→BLACK, depth=" << depth << "]\n";
+            }
         };
 
         for (auto& g : gates)
@@ -223,6 +346,12 @@ public:
         while (!resultStack.empty()) {
             dfsOrder.push_back(resultStack.top());
             resultStack.pop();
+        }
+
+        if (trace) {
+            std::cout << "\n[DFS Trace] 排序完成。執行順序：";
+            for (auto* g : dfsOrder) std::cout << g->name << " ";
+            std::cout << "\n";
         }
         return true;
     }
