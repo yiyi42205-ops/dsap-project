@@ -11,74 +11,9 @@
 // 編譯：g++ -std=c++17 -O2 -o random_circuit_gen random_circuit_gen.cpp
 // 執行：./random_circuit_gen（需先建立 results/ 目錄）
 
-#include "../circuit.h"
-#include <random>
-#include <numeric>
-#include <cmath>
+#include "../random_dag.h"   // generateRandomCircuit()
 #include <fstream>
 #include <iomanip>
-
-// ============================================================
-// 1. 隨機合法 DAG 生成器
-// ============================================================
-// 演算法：
-//   1. 建立 n_inputs 個主要輸入訊號（可用訊號集 = {IN_0, ..., IN_{n-1}}）
-//   2. 依序生成 gate_count 個閘：
-//      每個閘從已存在的訊號集中隨機選取 fan_in 個輸入
-//      閘的輸出加入可用訊號集
-//   3. 此順序天然是拓撲序，保證 DAG
-//
-Circuit generateRandomCircuit(int gate_count, int avg_fanin, unsigned seed) {
-    std::mt19937 rng(seed);
-
-    // 主要輸入數量：取 sqrt(N) 確保訊號池夠豐富但不過大
-    int n_inputs = std::max(3, (int)std::sqrt((double)gate_count));
-
-    Circuit c;
-    std::vector<std::string> available; // 目前可作為輸入的訊號
-
-    for (int i = 0; i < n_inputs; i++) {
-        std::string s = "IN_" + std::to_string(i);
-        c.addInput(s);
-        available.push_back(s);
-    }
-
-    // 閘類型：不含 NOT（單輸入），以維持 avg_fanin >= 2 的預期
-    static const std::vector<std::string> types = {"AND", "OR", "XOR", "NAND", "NOR"};
-    std::uniform_int_distribution<int> typeDist(0, (int)types.size() - 1);
-
-    for (int i = 0; i < gate_count; i++) {
-        std::string gname = "G_" + std::to_string(i);
-        std::string oname = "W_" + std::to_string(i);
-
-        // 確定 fan_in：至少 2，最多 min(available.size(), avg_fanin + 2)
-        int max_fi = std::min((int)available.size(), avg_fanin + 2);
-        int fi = std::max(2, std::min(max_fi, avg_fanin));
-
-        // 從可用訊號池隨機抽取 fi 個不重複輸入
-        // 用 partial_shuffle 取前 fi 個，O(fi) 效率
-        std::vector<int> idx(available.size());
-        std::iota(idx.begin(), idx.end(), 0);
-        for (int j = 0; j < fi; j++) {
-            std::uniform_int_distribution<int> d(j, (int)idx.size() - 1);
-            std::swap(idx[j], idx[d(rng)]);
-        }
-
-        std::vector<std::string> inputs;
-        inputs.reserve(fi);
-        for (int j = 0; j < fi; j++) inputs.push_back(available[idx[j]]);
-
-        c.addGate(types[typeDist(rng)], gname, inputs, oname);
-        available.push_back(oname);
-    }
-
-    // 最後幾個閘的輸出作為電路輸出
-    int n_outputs = std::max(1, gate_count / 20);
-    for (int i = 0; i < n_outputs; i++)
-        c.addOutput("W_" + std::to_string(gate_count - 1 - i));
-
-    return c;
-}
 
 // ============================================================
 // 2. 計時工具

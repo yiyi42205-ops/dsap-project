@@ -7,7 +7,8 @@ TESTS    = tests
 
 # ── 預設目標 ─────────────────────────────────────────────────────
 .PHONY: all main benchmarks bench_hash bench_topo bench_ordered bench_random \
-        plot test clean
+        plot scale_bench scale_plot structural_bench structural_plot test clean \
+        test_dfs_iter
 
 all: main
 
@@ -42,6 +43,24 @@ bench_random:
 plot:
 	cd $(BENCH) && python3 plot.py
 
+# ── 大規模 BFS vs DFS 效能測試 ───────────────────────────────
+scale_bench:
+	$(CXX) $(CXXFLAGS) $(BENCH)/scale_test.cpp -o $(BENCH)/scale_test
+	mkdir -p $(RESULTS)
+	cd $(BENCH) && ./scale_test
+
+scale_plot:
+	cd $(BENCH) && python3 plot_scale.py
+
+# ── 結構性 DAG 對照實驗 ───────────────────────────────────────
+structural_bench:
+	$(CXX) $(CXXFLAGS) $(BENCH)/structural_test.cpp -o $(BENCH)/structural_test
+	mkdir -p $(RESULTS)
+	cd $(BENCH) && ./structural_test
+
+structural_plot:
+	cd $(BENCH) && python3 plot_structural.py
+
 # ── 任務 C：Unit tests ───────────────────────────────────────────
 $(TESTS)/test_truth_table: $(TESTS)/test_truth_table.cpp src/circuit.h
 	$(CXX) $(CXXFLAGS) $< -o $@
@@ -52,9 +71,13 @@ $(TESTS)/test_edge_cases: $(TESTS)/test_edge_cases.cpp src/circuit.h
 $(TESTS)/test_topo_consistency: $(TESTS)/test_topo_consistency.cpp src/circuit.h
 	$(CXX) $(CXXFLAGS) $< -o $@
 
+$(TESTS)/test_dfs_iterative: $(TESTS)/test_dfs_iterative.cpp src/circuit.h
+	$(CXX) $(CXXFLAGS) $< -o $@
+
 test: $(TESTS)/test_truth_table \
       $(TESTS)/test_edge_cases \
-      $(TESTS)/test_topo_consistency
+      $(TESTS)/test_topo_consistency \
+      $(TESTS)/test_dfs_iterative
 	@echo ""
 	@echo "╔══════════════════════════════════╗"
 	@echo "║        Running Unit Tests        ║"
@@ -65,6 +88,8 @@ test: $(TESTS)/test_truth_table \
 	@echo ""
 	@$(TESTS)/test_topo_consistency || (echo ""; echo "test_topo_consistency FAILED"; exit 1)
 	@echo ""
+	@$(TESTS)/test_dfs_iterative    || (echo ""; echo "test_dfs_iterative FAILED"; exit 1)
+	@echo ""
 	@echo "All tests passed."
 
 # ── 清理 ─────────────────────────────────────────────────────────
@@ -74,7 +99,10 @@ clean:
 	      $(BENCH)/topo_vs_naive \
 	      $(BENCH)/ordered_vs_unordered \
 	      $(BENCH)/random_circuit_gen \
+	      $(BENCH)/scale_test \
+	      $(BENCH)/structural_test \
 	      $(TESTS)/test_truth_table \
 	      $(TESTS)/test_edge_cases \
-	      $(TESTS)/test_topo_consistency
+	      $(TESTS)/test_topo_consistency \
+	      $(TESTS)/test_dfs_iterative
 	rm -rf $(RESULTS)

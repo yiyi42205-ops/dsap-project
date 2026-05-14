@@ -108,6 +108,7 @@ private:
 
     std::vector<Gate*> bfsOrder;
     std::vector<Gate*> dfsOrder;
+    std::vector<Gate*> dfsIterOrder;
 
 public:
     void addInput(const std::string& name) {
@@ -355,6 +356,72 @@ public:
         }
         return true;
     }
+
+    // ── DFS 拓撲排序（迭代版，顯式 stack）O(V+E) ─────────────
+    // 用 stack<pair<Gate*, int>> 模擬遞迴：int 為下一個待訪 child 的 index
+    // 三色標記：0=WHITE / 1=GRAY / 2=BLACK，可偵測迴圈
+    bool topologicalSortDFSIterative() {
+        dfsIterOrder.clear();
+
+        std::unordered_map<std::string, Gate*> signalSource;
+        for (auto& g : gates) signalSource[g->outputName] = g.get();
+
+        // 建立鄰接表（同 DFS 遞迴版）
+        std::unordered_map<Gate*, std::vector<Gate*>> adj;
+        for (auto& g : gates)
+            for (const auto& inp : g->inputNames)
+                if (signalSource.count(inp))
+                    adj[signalSource[inp]].push_back(g.get());
+
+        std::unordered_map<Gate*, int> state;
+        for (auto& g : gates) state[g.get()] = 0; // WHITE
+
+        std::stack<Gate*> resultStack;
+        bool hasCycle = false;
+
+        // worklist: pair<Gate*, child_index>
+        std::stack<std::pair<Gate*, int>> worklist;
+
+        for (auto& g : gates) {
+            if (state[g.get()] != 0) continue; // 已訪問過
+
+            state[g.get()] = 1; // GRAY
+            worklist.push({g.get(), 0});
+
+            while (!worklist.empty()) {
+                auto& [node, idx] = worklist.top();
+                auto& children    = adj[node];
+
+                if (idx < (int)children.size()) {
+                    Gate* child = children[idx++];
+                    if (state[child] == 1) { hasCycle = true; break; }
+                    if (state[child] == 0) {
+                        state[child] = 1; // GRAY
+                        worklist.push({child, 0});
+                    }
+                } else {
+                    // 所有 child 都處理完：BLACK，寫入結果
+                    state[node] = 2; // BLACK
+                    resultStack.push(node);
+                    worklist.pop();
+                }
+            }
+            if (hasCycle) break;
+        }
+
+        if (hasCycle) {
+            std::cerr << "錯誤：電路中存在迴圈（DFS iterative 偵測）！" << std::endl;
+            return false;
+        }
+
+        while (!resultStack.empty()) {
+            dfsIterOrder.push_back(resultStack.top());
+            resultStack.pop();
+        }
+        return true;
+    }
+
+    const std::vector<Gate*>& getDFSIterOrder() const { return dfsIterOrder; }
 
     // ── 預設使用 BFS ─────────────────────────────────────────
     bool topologicalSort() {

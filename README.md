@@ -1,24 +1,22 @@
 # 數位邏輯電路模擬器 (Digital Logic Circuit Simulator)
 
-> **換題說明：** 在進一步研究後，我發現數位邏輯電路模擬器能更完整地運用本課程教授的多種資料結構（DAG、拓撲排序、BST、Heap、Hash Map），同時也與我未來想深入學習的計算機硬體領域密切相關，因此決定更換主題。
-
 ## Proposal Report
 
 ### 動機與目標
 
-電腦的一切運算都建立在最基礎的邏輯閘之上：AND、OR、NOT。從這些簡單的元件出發，可以組裝出加法器、多工器，甚至整個 CPU。然而，在學習資料結構的過程中，我逐漸好奇：「這些抽象的資料結構，能不能直接對應到硬體的運作方式？」
+修讀資料結構課程時，學到 DAG 與拓撲排序的應用後，我意識到一件之前修交換電路時沒被點明的事：**邏輯閘電路本身就是一個 DAG，訊號傳播就是拓撲排序**。交換電路那門課從電子工程的角度切入，沒有特別著墨在底層的資料結構抽象；而資料結構課在介紹 DAG、Heap、Hash Map 等抽象演算法時，也很少直接連到真實硬體。這個跨課程的觀察，是本專題的起點。
 
-本專題的目標是開發一個 C++ 命令列工具，讓使用者以文字描述一個數位邏輯電路（指定邏輯閘與連線方式），程式會自動分析電路結構、計算輸出結果，並產生完整的真值表。透過這個專題，我希望將課程所學的資料結構應用於模擬真實硬體的運作邏輯。
+本專題以「用電路學資料結構」為核心定位，開發一個 C++ 命令列工具，讓使用者以文字描述數位邏輯電路，程式會自動分析電路結構、計算輸出結果、產生真值表，並對拓撲排序與關鍵路徑分析等核心演算法進行可視化追蹤與效能實驗。專案的價值不在於取代既有電路模擬器（Logisim / CircuitVerse），而在於**讓 DAG、拓撲排序、Heap 這些抽象資料結構，透過硬體模擬被「看見」**——這也是現有電路工具普遍未直接呈現的部分。
 
 ### 競品比較
 
 | 項目 | Logisim | CircuitVerse | 本專題 |
 |------|---------|--------------|--------|
-| 類型 | Java 桌面應用程式 | 線上網頁模擬器 | C++ 命令列工具 |
+| 類型 | Java 桌面應用程式 | 線上網頁模擬器 | C++ 命令列工具 + React 視覺化 |
 | 使用方式 | 圖形拖拉介面 | 圖形拖拉介面 | 文字描述檔定義電路 |
 | 開源 | ✅ | ✅ | ✅ |
-| 演算法過程可視化 | 黑箱處理，使用者看不到排序過程 | 黑箱處理，使用者看不到排序過程 | **差異化定位**：明確輸出 BFS / DFS 拓撲排序的逐步計算順序與 DAG 結構，讓使用者看見演算法如何驅動模擬 |
-| 關鍵路徑分析 | ❌ | ❌ | ✅ 計算最長延遲路徑 |
+| 演算法過程可視化 | 未直接呈現 | 未直接呈現 | 逐步輸出 BFS / DFS 拓撲排序的計算順序與 DAG 結構 |
+| 關鍵路徑分析 | ❌ | ❌ | ✅ 計算最長延遲路徑 + Top-K |
 | 演算法教學用途 | 低（重視操作） | 低（重視操作） | 高（展示資料結構如何驅動模擬） |
 | 學習門檻 | 中（需安裝 Java） | 低 | 低（只需 g++ 編譯） |
 
@@ -65,6 +63,8 @@ Prototype 階段預計完成以下可驗證的功能：
 4. **能偵測電路中的迴圈（非 DAG）並報錯**
    - 驗證方式：故意建立一個有迴圈的電路描述檔，確認程式能偵測並印出錯誤訊息。
 
+> **換題說明：** 在進一步研究後，我發現數位邏輯電路模擬器能更完整地運用本課程教授的多種資料結構（DAG、拓撲排序、BST、Heap、Hash Map），同時也與我未來想深入學習的計算機硬體領域密切相關，因此決定更換主題。
+
 ---
 
 ## Prototype Report
@@ -110,13 +110,15 @@ Prototype 階段預計完成以下可驗證的功能：
 
    觀察：在小規模電路中兩者差異不大；隨著閘數增加，DFS 版本因為較少的記憶體配置開銷而領先。兩種演算法產出的拓撲排序順序不同，但模擬結果完全一致，驗證了「合法的拓撲排序不唯一，但計算結果唯一」。
 
+   > **註：** 此初步觀察（「規模越大 DFS 越領先」）在 Final Report 階段的大規模實驗（10–5000 閘 × 三種 DAG 結構）中被修正——真正的變因是 DAG 形狀而非規模。詳見 Final Report 的「主要研究發現」一節。
+
 ### 遇到的困難
 
 1. **迴圈偵測的設計**：DFS 版需要區分「訪問中」和「已完成」兩種狀態才能正確偵測迴圈（back edge），一開始只用 visited 布林值導致誤判。後來改用三態（未訪問 / 訪問中 / 已完成）解決。
 
 2. **效能測量的穩定性**：單次執行時間太短（微秒級），受系統排程影響大。改為重複執行 10,000 次取平均後，數據穩定。
 
-3. **4-bit 加法器的 DAG 深度**：4 個全加器串接形成較長的依賴鏈（carry 必須逐級傳播），拓撲排序的結果對計算順序影響較大，這也是為什麼規模越大 BFS 和 DFS 的差異越明顯。
+3. **4-bit 加法器的 DAG 深度**：4 個全加器串接形成較長的依賴鏈（carry 必須逐級傳播），拓撲排序的結果對計算順序影響較大，這也是當時猜測「規模越大 BFS 和 DFS 的差異越明顯」的原因（後續實驗推翻此假設）。
 
 ### 下一步計畫
 
@@ -131,18 +133,45 @@ Prototype 階段預計完成以下可驗證的功能：
 
 ### 專案說明
 
-本專題實作了一個 C++ 命令列數位邏輯電路模擬器，以「用電路學資料結構」為核心定位：
-電路本身是一個 **有向無環圖（DAG）**，模擬器透過**拓撲排序**決定邏輯閘的計算順序，
+本專題實作了一個 C++ 命令列數位邏輯電路模擬器，搭配 React 視覺化前端，以「用電路學資料結構」為核心定位：
+電路本身是一個 **有向無環圖（DAG）**，模擬器透過**拓撲排序**決定邏輯閘的計算順序，**Heap** 找出延遲最長的關鍵路徑，
 讓使用者能清楚看到演算法如何驅動硬體模擬。
 
-**最終實作的功能：**
+### 主要研究發現
+
+本專題的實驗階段產生了三個值得記錄的發現，它們也是本專題相對於既有電路模擬器（Logisim / CircuitVerse）最有區別性的貢獻：
+
+**1. 演算法選擇敏感於 DAG 結構，而非規模**
+
+Prototype 階段的初步觀察是「規模越大 DFS 領先 BFS 越多」（4-bit 加法器在 20 閘下 DFS 快 1.5x）。但在 `scale_bench`（10–5000 閘隨機 DAG）下，加速比穩定在 1.1–1.2x，**與規模幾乎無關**，假設被推翻。
+
+進一步的 `structural_bench` 揭示真正的變因是 DAG 形狀：
+- **Random / Wide Fanout**：DFS 比 BFS 快約 8–15%，符合「BFS 需要維護 in-degree 計數與 queue 操作，常數因子較高」的理論預期。
+- **Deep Chain**：三者幾乎相同（±5%），因為深度極深時遞迴 overhead 抵消了 cache locality 優勢。
+
+這個結果的意義超出本專題本身——任何處理 DAG 拓撲排序的系統（EDA 工具、build system 如 Bazel / Ninja、ML 框架的 autograd），其演算法選擇都不能只看「規模」這一個維度。
+
+**2. 理論等價不蘊含實作等價**
+
+DFS 拓撲排序的遞迴版與迭代版（顯式 stack）理論上等價，皆為 O(V+E)。但實測在 deep chain 5000 閘下，迭代版比遞迴版快 ~4.5%（比 BFS 快 ~5.5%），差距雖小但方向穩定，且隨深度增加而擴大。
+
+原因是遞迴版透過 `std::function` 包裝會引入函式呼叫開銷與 cache miss，而顯式 stack 把這些開銷消除。此實驗呼應課程「遞迴可由顯式 stack 模擬」的核心概念，並進一步說明：**選對演算法只是第一步，選對實作才能發揮理論優勢**。
+
+**3. Critical Path 將抽象資料結構連到具體物理量**
+
+DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電路的最高工作頻率（MHz）。例如全加器的 critical path 為 7 ns，最高頻率即為 142 MHz。
+
+現代 CPU 動輒上億個邏輯閘、跑 5 GHz，本質上就是這個演算法在百萬倍規模下的應用。資料結構不是抽象練習，是決定硬體效能的數學基礎。
+
+### 最終實作的功能
 
 | 功能 | 說明 |
 |------|------|
 | 6 種邏輯閘 | AND / OR / NOT / XOR / NAND / NOR，OOP 繼承 + 虛擬函式 |
 | 電路描述檔解析 | 自訂 `.txt` 格式，支援 INPUT / OUTPUT / GATE 關鍵字 |
 | BFS 拓撲排序 | Kahn's Algorithm，O(V+E)，deque + inDegree map |
-| DFS 拓撲排序 | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK） |
+| DFS 拓撲排序（遞迴） | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK） |
+| **DFS 拓撲排序（迭代）** | `topologicalSortDFSIterative()`：顯式 stack + 三色標記，不用遞迴；支援環偵測；4 個 unit tests 驗證正確性 |
 | 迴圈偵測 | BFS 和 DFS 均支援，5 種不同拓撲的迴圈測試 |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
 | **關鍵路徑分析（Critical Path）** | DAG DP 求最長延遲 + Max-Heap Top-K 反向路徑搜尋；各閘有實際傳播延遲（NOT=1、AND/OR/NAND/NOR=2、XOR=3 ns）；輸出路徑序列、總延遲、最高工作頻率 |
@@ -153,6 +182,9 @@ Prototype 階段預計完成以下可驗證的功能：
 | Ablation Study | 3 組資料結構對照實驗（Hash Map / 拓撲排序 / Map 選擇）|
 | 嚴謹 benchmark | 隨機 DAG，100 warm-up + 1000 測量，log-log 圖 |
 | 病態測試 | deep_chain / wide_fanout / dense_circuit + 5 個迴圈案例 |
+| **大規模效能測試（scale_bench）** | 7 個規模（10–5000 閘）× 隨機 DAG × 三種演算法（BFS / DFS 遞迴 / DFS 迭代），5 個 seed 取平均；輸出 CSV + 兩張圖 |
+| **結構性 DAG 對照實驗（structural_bench）** | 三種 DAG 結構（random / deep_chain / wide_fanout）× 7 個規模 × 三種演算法 × 5 seed；輸出 CSV + 三張圖 |
+| **React 網頁視覺化** | React + Vite + React Flow；支援電路選擇器、INPUT 節點 0/1 切換 + 訊號傳播、BFS/DFS 排序動畫步進、Critical Path 高亮 |
 
 ---
 
@@ -162,7 +194,7 @@ Prototype 階段預計完成以下可驗證的功能：
 
 ```bash
 make          # 編譯主程式（生成 ./simulator）
-make test     # 執行所有 unit tests（15 個測試）
+make test     # 執行所有 unit tests（19 個測試）
 ```
 
 #### 互動式選單模式
@@ -243,13 +275,27 @@ Critical Path 輸出範例（全加器，預設 K=3）：
 ./simulator --export-json output/full_adder.json --critical-path 5 src/circuits/full_adder.txt
 ```
 
-#### 執行 Benchmark（任務 D / B）
+#### 執行 Benchmark
 
 ```bash
-make bench_random    # 嚴謹 BFS vs DFS（100 warm-up + 1000 測量）
-make benchmarks      # 執行 Ablation Study 三組實驗
-make plot            # 生成所有圖表（含 log-log 圖）
+make bench_random        # 嚴謹 BFS vs DFS（100 warm-up + 1000 測量）
+make benchmarks          # 執行 Ablation Study 三組實驗
+make plot                # 生成 random circuit log-log 圖
+make scale_bench         # 七個規模 × 三種演算法（BFS / DFS-rec / DFS-iter）隨機 DAG 效能測試
+make scale_plot          # 生成 scale_test_loglog.png / scale_test_speedup.png
+make structural_bench    # 三種 DAG 結構 × 七個規模 × 三種演算法對照實驗
+make structural_plot     # 生成 structural_loglog.png / structural_speedup.png / structural_bar1000.png
 ```
+
+圖表輸出說明：
+
+| 圖檔 | 說明 |
+|------|------|
+| `results/scale_test_loglog.png` | 隨機 DAG 規模 vs 時間 log-log 圖（含 error bar）|
+| `results/scale_test_speedup.png` | 各規模 DFS-rec / DFS-iter 相對 BFS 的耗時比 grouped bar |
+| `results/structural_loglog.png` | 三種結構 × 三種演算法 log-log 效能圖（9 條線）|
+| `results/structural_speedup.png` | DFS-rec/BFS、DFS-iter/BFS 加速比，三種結構各一子圖 |
+| `results/structural_bar1000.png` | 1000 閘 grouped bar：三種結構 × 三種演算法 |
 
 #### 執行病態測試
 
@@ -271,6 +317,21 @@ make plot            # 生成所有圖表（含 log-log 圖）
 ./simulator examples/stress_tests/cycle_detection_cases/nested_cycles.txt
 ```
 
+#### 網頁視覺化
+
+```bash
+cd web
+npm install
+npm run dev     # 開啟 http://localhost:5173
+```
+
+功能：
+- 電路選擇器（半加器 / 全加器 / MUX / 4-bit 加法器）
+- 點擊 INPUT 節點切換 0/1，即時計算所有閘的輸出
+- BFS / DFS 拓撲排序步進動畫（依排序順序高亮節點）
+- Critical Path 高亮（紅色邊 + 高亮節點）
+- hover tooltip 顯示閘的延遲、輸入值、輸出值
+
 ---
 
 ### 與課程的關聯總結
@@ -283,8 +344,12 @@ make plot            # 生成所有圖表（含 log-log 圖）
 | **平衡二元搜尋樹（BST）** | `map` vs `unordered_map` 的正確性與效能取捨；Ablation Study 實驗三 |
 | **堆積與優先權佇列（Heap）** | Critical Path Top-K 搜尋的核心：`std::priority_queue`（Max-Heap）按延遲上界排序，確保前 K 個彈出的完整路徑即為最長 K 條 |
 | **佇列（Queue）** | BFS 的核心資料結構，`deque` 實作 |
-| **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；結果反轉用 `stack<Gate*>` |
+| **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；迭代版用 `std::stack` 顯式管理 |
 | **OOP / 繼承 / 多型** | `Gate` 基底類別 → `AndGate`、`OrGate` 等子類別，虛擬函式 `compute()` |
-| **演算法複雜度分析** | O(V+E) vs O(V²) 的理論分析與實測驗證；log-log 圖呈現 |
+| **演算法複雜度分析** | O(V+E) 線性的理論分析與實測驗證；log-log 圖呈現 |
 | **迴圈偵測（三色標記）** | DFS 的 WHITE/GRAY/BLACK 標記，back edge 偵測 |
 | **統計測量** | warm-up / 正式測量 / 均值 / 標準差，避免系統排程抖動影響 |
+| **迭代 vs 遞迴的實作等價性** | `topologicalSortDFSIterative()`：用 `stack<pair<Gate*, int>>` 模擬遞迴 call stack，消除 `std::function` overhead；在深度鏈上比遞迴版快 ~4.5%（5000 閘，比 BFS 快 ~5.5%），實測「stack 與 recursion 等價」的理論在實作層的細微差距 |
+| **實驗設計與對照分析** | 三種 DAG 結構（random / deep_chain / wide_fanout）× 三種演算法的系統性對照；發現 deep_chain 上三者幾乎相同（±2%），random / wide_fanout 上 DFS 比 BFS 快約 8–15%，符合 BFS queue 操作常數因子較高的理論預期 |
+
+總結來說，本專題不僅實作了課程教授的多種資料結構，更透過系統性的對照實驗，驗證了這些資料結構在實務情境下的選擇取捨。對我個人而言，這個專案讓資料結構從「課本上的演算法」變成「能解釋電腦為什麼跑這麼快」的具體工具——這比通過任何單元測試都更值得記住。
