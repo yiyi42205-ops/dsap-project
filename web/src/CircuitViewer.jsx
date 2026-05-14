@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -11,7 +11,7 @@ import 'reactflow/dist/style.css';
 import { buildLayout } from './layoutUtils.js';
 
 // ── node 樣式 ────────────────────────────────────────────────
-function nodeStyle(type, signal, highlighted, isInput) {
+function nodeStyle(type, highlighted, isInput) {
   const base = {
     padding: '6px 10px',
     borderRadius: 6,
@@ -32,9 +32,28 @@ function nodeStyle(type, signal, highlighted, isInput) {
   return base;
 }
 
-// circuitData → React Flow nodes array
+// ── hover tooltip 文字 ───────────────────────────────────────
+function buildTooltip(n, signalMap, incomingEdges) {
+  const signal = signalMap?.get(n.id) ?? false;
+  const val = signal ? '1' : '0';
+  if (n.type === 'INPUT' || n.type === 'OUTPUT') {
+    return `${n.id} / 目前值: ${val}`;
+  }
+  const preds = incomingEdges.get(n.id) ?? [];
+  const inputVals = preds.map(pid => (signalMap?.get(pid) ?? false) ? '1' : '0');
+  return `${n.id} (${n.type}) / 延遲: ${n.delay}ns / 輸入: [${inputVals.join(', ')}] / 輸出: ${val}`;
+}
+
+// ── circuitData → React Flow nodes ──────────────────────────
 function buildRFNodes(circuitData, signalMap, highlightedId, onInputToggle) {
   const positions = buildLayout(circuitData);
+
+  // 建立 incomingEdges: nodeId → [fromId, ...]
+  const incomingEdges = new Map(circuitData.nodes.map(n => [n.id, []]));
+  for (const e of circuitData.edges) {
+    if (incomingEdges.has(e.to)) incomingEdges.get(e.to).push(e.from);
+  }
+
   return circuitData.nodes.map(n => {
     const signal = signalMap?.get(n.id) ?? false;
     const isInput = n.type === 'INPUT';
@@ -44,32 +63,34 @@ function buildRFNodes(circuitData, signalMap, highlightedId, onInputToggle) {
       ? `${n.id}\n= ${signal ? '1' : '0'}`
       : `${n.id}\n(${n.type})`;
 
+    const tooltip = buildTooltip(n, signalMap, incomingEdges);
+
     return {
       id: n.id,
       position: positions[n.id] ?? { x: 0, y: 0 },
       data: {
         label: (
-          <div onClick={isInput ? () => onInputToggle(n.id) : undefined}>
+          <div
+            title={tooltip}
+            onClick={isInput ? () => onInputToggle(n.id) : undefined}
+          >
             {label.split('\n').map((l, i) => <div key={i}>{l}</div>)}
           </div>
         ),
       },
-      style: nodeStyle(n.type, signal, n.id === highlightedId, isInput),
+      style: nodeStyle(n.type, n.id === highlightedId, isInput),
     };
   });
 }
 
-// circuitData + signalMap → React Flow edges array
+// ── circuitData → React Flow edges ──────────────────────────
 function buildRFEdges(circuitData, signalMap, criticalEdgeSet) {
-  return circuitData.edges.map((e, i) => {
+  return circuitData.edges.map(e => {
     const edgeId = `${e.from}__${e.to}`;
     const isCritical = criticalEdgeSet?.has(edgeId);
-    // signal on this edge = value of the source node
     const signal = signalMap?.get(e.from) ?? false;
-
     const color = isCritical ? '#ef4444' : signal ? '#ef4444' : '#9ca3af';
     const strokeWidth = isCritical ? 4 : 2;
-
     return {
       id: edgeId,
       source: e.from,
@@ -81,7 +102,7 @@ function buildRFEdges(circuitData, signalMap, criticalEdgeSet) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
 export default function CircuitViewer({
   circuitData,
   signalMap,
@@ -92,7 +113,6 @@ export default function CircuitViewer({
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // 每次 circuitData / signalMap / highlight / critical 變動時重算
   useEffect(() => {
     if (!circuitData) return;
     setNodes(buildRFNodes(circuitData, signalMap, highlightedNodeId, onInputToggle));

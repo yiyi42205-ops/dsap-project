@@ -5,27 +5,20 @@ import { propagateSignals } from './gateLogic.js';
 import './App.css';
 
 const CIRCUITS = [
-  { label: 'Half Adder',  file: 'half_adder.json' },
-  { label: 'Full Adder',  file: 'full_adder.json' },
-  { label: '2-to-1 MUX', file: 'mux_2to1.json' },
-  { label: '4-bit Adder', file: '4bit_adder.json' },
+  { label: 'Half Adder',  file: 'half_adder.json',  desc: '兩個 1-bit 輸入相加，輸出 sum 與 carry' },
+  { label: 'Full Adder',  file: 'full_adder.json',  desc: '3 輸入 1-bit 加法器，含進位輸入' },
+  { label: '2-to-1 MUX', file: 'mux_2to1.json',    desc: '由 SEL 訊號選擇輸出 A 或 B' },
+  { label: '4-bit Adder', file: '4bit_adder.json',  desc: '4-bit 加法器，4 個 full adder 串接' },
 ];
 
 export default function App() {
   const [circuitIdx, setCircuitIdx] = useState(0);
   const [circuitData, setCircuitData] = useState(null);
-
-  // inputValues: { [nodeId]: boolean }
   const [inputValues, setInputValues] = useState({});
-  // signalMap: Map<nodeId, boolean>
   const [signalMap, setSignalMap] = useState(null);
-
-  // 動畫
   const [highlightedNodeId, setHighlightedNodeId] = useState(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const animTimers = useRef([]);
-
-  // Critical Path
   const [selectedCriticalPathIdx, setSelectedCriticalPathIdx] = useState(null);
   const [criticalEdgeSet, setCriticalEdgeSet] = useState(null);
 
@@ -50,8 +43,7 @@ export default function App() {
   // ── 訊號傳播 ─────────────────────────────────────────────
   useEffect(() => {
     if (!circuitData) return;
-    const map = propagateSignals(circuitData, inputValues);
-    setSignalMap(map);
+    setSignalMap(propagateSignals(circuitData, inputValues));
   }, [circuitData, inputValues]);
 
   // ── INPUT toggle ─────────────────────────────────────────
@@ -109,17 +101,24 @@ export default function App() {
   // ── Render ───────────────────────────────────────────────
   return (
     <div className="app-root">
+      {/* 頂部 header */}
       <header className="app-header">
-        <span className="app-title">數位邏輯電路模擬器</span>
-        <select
-          className="circuit-select"
-          value={circuitIdx}
-          onChange={e => setCircuitIdx(Number(e.target.value))}
-        >
-          {CIRCUITS.map((c, i) => (
-            <option key={i} value={i}>{c.label}</option>
-          ))}
-        </select>
+        <div className="app-title-group">
+          <span className="app-title">數位邏輯電路模擬器</span>
+          <span className="app-subtitle">將電路視為 DAG，以拓撲排序決定邏輯閘的計算順序</span>
+        </div>
+        <div className="app-controls">
+          <select
+            className="circuit-select"
+            value={circuitIdx}
+            onChange={e => setCircuitIdx(Number(e.target.value))}
+          >
+            {CIRCUITS.map((c, i) => (
+              <option key={i} value={i}>{c.label}</option>
+            ))}
+          </select>
+          <span className="circuit-desc">{CIRCUITS[circuitIdx].desc}</span>
+        </div>
         {circuitData && (
           <span className="circuit-info">
             {circuitData.nodes.filter(n => n.type === 'INPUT').length} inputs ·{' '}
@@ -129,15 +128,22 @@ export default function App() {
         )}
       </header>
 
+      {/* 主體 */}
       <div className="app-body">
         <div className="viewer-area">
-          <CircuitViewer
-            circuitData={circuitData}
-            signalMap={signalMap}
-            highlightedNodeId={highlightedNodeId}
-            criticalEdgeSet={criticalEdgeSet}
-            onInputToggle={handleInputToggle}
-          />
+          {/* 互動提示框 */}
+          <div className="hint-box">
+            💡 點擊左側 <strong>INPUT</strong> 節點切換 0/1，觀察訊號傳播。紅色邊代表訊號為 1。
+          </div>
+          <div className="viewer-canvas">
+            <CircuitViewer
+              circuitData={circuitData}
+              signalMap={signalMap}
+              highlightedNodeId={highlightedNodeId}
+              criticalEdgeSet={criticalEdgeSet}
+              onInputToggle={handleInputToggle}
+            />
+          </div>
         </div>
         <ControlPanel
           circuitData={circuitData}
