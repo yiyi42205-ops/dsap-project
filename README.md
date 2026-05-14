@@ -1,6 +1,6 @@
 # 數位邏輯電路模擬器 (Digital Logic Circuit Simulator)
 
-> **換題說明：** 在進一步研究後，我發現數位邏輯電路模擬器能更完整地運用本課程教授的多種資料結構（DAG、拓撲排序、BST、Heap、Hash Map、Tree），同時也與我未來想深入學習的計算機硬體領域密切相關，因此決定更換主題。
+> **換題說明：** 在進一步研究後，我發現數位邏輯電路模擬器能更完整地運用本課程教授的多種資料結構（DAG、拓撲排序、BST、Heap、Hash Map），同時也與我未來想深入學習的計算機硬體領域密切相關，因此決定更換主題。
 
 ## Proposal Report
 
@@ -47,7 +47,6 @@
 | **雜湊表（Hash Map）** | 使用 `std::unordered_map` 儲存元件名稱與物件的對應關係，實現 O(1) 的元件查詢。 |
 | **二元搜尋樹（BST）** | 以 `std::map`（底層為紅黑樹）管理電路中的訊號線名稱，維持有序的訊號列表以便輸出真值表。 |
 | **堆積與優先權佇列（Heap / Priority Queue）** | 用於「Top-K 關鍵路徑」查詢：找出電路中延遲最長的前 K 條路徑。DAG 單一最長路徑用拓撲排序 + DP 即可求得；引入 Max-Heap 是為了支援 Top-K 查詢，能在不窮舉所有路徑的前提下依序取出延遲最大的 K 條路徑。 |
-| **運算式樹（Expression Tree）** | 當電路只有單一輸出時，從輸出端往回展開，每個邏輯閘為內部節點、每條輸入訊號為葉節點，形成一棵運算式樹。對此樹進行後序遍歷（post-order traversal）恰好對應訊號計算的正確順序。 |
 | **Struct / Class（OOP）** | 使用繼承與多型設計邏輯閘的類別階層：基底類別 `Gate`，衍生出 `AndGate`、`OrGate`、`NotGate` 等子類別。 |
 
 ### Prototype 預計可驗證內容
@@ -146,7 +145,9 @@ Prototype 階段預計完成以下可驗證的功能：
 | DFS 拓撲排序 | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK） |
 | 迴圈偵測 | BFS 和 DFS 均支援，5 種不同拓撲的迴圈測試 |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
-| `--trace` 模式 | 逐步印出 BFS / DFS 排序的每一步決策 |
+| **關鍵路徑分析（Critical Path）** | DAG DP 求最長延遲 + Max-Heap Top-K 反向路徑搜尋；各閘有實際傳播延遲（NOT=1、AND/OR/NAND/NOR=2、XOR=3 ns）；輸出路徑序列、總延遲、最高工作頻率 |
+| `--trace` 模式 | 逐步印出 BFS / DFS 排序的每一步決策，以及 Critical Path DP 計算過程 |
+| `--critical-path K` | 指定回傳前 K 條最長路徑（預設 K=3） |
 | 效能比較 | BFS vs DFS 拓撲排序時間，含平均值和標準差 |
 | Ablation Study | 3 組資料結構對照實驗（Hash Map / 拓撲排序 / Map 選擇）|
 | 嚴謹 benchmark | 隨機 DAG，100 warm-up + 1000 測量，log-log 圖 |
@@ -183,7 +184,24 @@ make test     # 執行所有 unit tests（15 個測試）
 ./simulator src/circuits/full_adder.txt
 ```
 
-輸出：電路資訊 → 拓撲排序順序 → 真值表 → BFS vs DFS 效能比較
+輸出：電路資訊 → 拓撲排序順序 → 真值表 → Critical Path Analysis → BFS vs DFS 效能比較
+
+#### Critical Path 指定 K 值
+
+```bash
+./simulator --critical-path 5 src/circuits/full_adder.txt   # 印出前 5 條最長路徑
+```
+
+Critical Path 輸出範例（全加器，預設 K=3）：
+```
+=== Critical Path Analysis ===
+#1 延遲: 7 ns (最高頻率: 142 MHz)
+   路徑: A → XOR_1 → AND_2 → OR_1 → Cout
+#2 延遲: 7 ns (最高頻率: 142 MHz)
+   路徑: B → XOR_1 → AND_2 → OR_1 → Cout
+#3 延遲: 6 ns (最高頻率: 166 MHz)
+   路徑: A → XOR_1 → XOR_2 → S
+```
 
 #### `--trace` 模式（逐步追蹤）
 
@@ -191,30 +209,15 @@ make test     # 執行所有 unit tests（15 個測試）
 ./simulator --trace src/circuits/full_adder.txt
 ```
 
-BFS trace 輸出範例：
-```
-[BFS Trace] 初始佇列（indegree=0 的閘）: [XOR_1, AND_1]
+`--trace` 模式下會逐步印出 BFS 排序、DFS 排序，以及 Critical Path DP 計算每個節點延遲的過程：
 
-==========
-Step 1: Pop XOR_1 (XOR gate)
-  Current queue: [AND_1]
-  Current indegree: {AND_2:1, OR_1:2, XOR_2:1}
-  XOR_1 outputs to: [XOR_2, AND_2]
-  → XOR_2 indegree 1→0, push to queue
-  → AND_2 indegree 1→0, push to queue
-==========
 ```
-
-DFS trace 輸出範例：
-```
-→ Entering XOR_1 (XOR) [WHITE→GRAY, depth=0]
-  → Entering XOR_2 (XOR) [WHITE→GRAY, depth=1]
-  ← Finishing XOR_2 (XOR) [GRAY→BLACK, depth=1]
-  → Entering AND_2 (AND) [WHITE→GRAY, depth=1]
-    → Entering OR_1 (OR) [WHITE→GRAY, depth=2]
-    ← Finishing OR_1 (OR) [GRAY→BLACK, depth=2]
-  ← Finishing AND_2 (AND) [GRAY→BLACK, depth=1]
-← Finishing XOR_1 (XOR) [GRAY→BLACK, depth=0]
+[CP Trace] DP 計算各閘最長到達延遲（拓撲順序）：
+  XOR_1 (XOR, delay=3)  incoming_max=0  dist=3
+  AND_1 (AND, delay=2)  incoming_max=0  dist=2
+  XOR_2 (XOR, delay=3)  incoming_max=3  dist=6
+  AND_2 (AND, delay=2)  incoming_max=3  dist=5
+  OR_1 (OR, delay=2)  incoming_max=5  dist=7
 ```
 
 > 注意：`--trace` 模式下跳過真值表和效能比較，建議用於小型電路（< 20 閘）。
@@ -257,6 +260,7 @@ make plot            # 生成所有圖表（含 log-log 圖）
 | **拓撲排序（BFS/DFS）** | 決定閘的計算順序，兩種演算法的完整實作與比較 |
 | **雜湊表（Hash Map）** | `unordered_map` 儲存訊號值，O(1) 查詢；Ablation Study 實驗一 |
 | **平衡二元搜尋樹（BST）** | `map` vs `unordered_map` 的正確性與效能取捨；Ablation Study 實驗三 |
+| **堆積與優先權佇列（Heap）** | Critical Path Top-K 搜尋的核心：`std::priority_queue`（Max-Heap）按延遲上界排序，確保前 K 個彈出的完整路徑即為最長 K 條 |
 | **佇列（Queue）** | BFS 的核心資料結構，`deque` 實作 |
 | **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；結果反轉用 `stack<Gate*>` |
 | **OOP / 繼承 / 多型** | `Gate` 基底類別 → `AndGate`、`OrGate` 等子類別，虛擬函式 `compute()` |

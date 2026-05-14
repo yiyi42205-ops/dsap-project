@@ -1,4 +1,5 @@
 #include "circuit.h"
+#include "critical_path.h"
 
 // ============================================================
 // 4. 內建範例電路
@@ -83,6 +84,7 @@ int main(int argc, char* argv[]) {
     // ── 解析命令列引數 ───────────────────────────────────────
     bool traceMode = false;
     int  maxSteps  = -1;   // -1 = 無限制
+    int  topK      = 3;    // Critical Path Top-K，預設 3
     std::string fileArg = "";
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -94,6 +96,14 @@ int main(int argc, char* argv[]) {
                 if (maxSteps < 0) { std::cerr << "錯誤：--max-steps 必須為非負整數\n"; return 1; }
             } catch (...) {
                 std::cerr << "錯誤：--max-steps 的引數不是有效整數：" << argv[i] << "\n";
+                return 1;
+            }
+        } else if (arg == "--critical-path" && i + 1 < argc) {
+            try {
+                topK = std::stoi(argv[++i]);
+                if (topK <= 0) { std::cerr << "錯誤：--critical-path K 必須為正整數\n"; return 1; }
+            } catch (...) {
+                std::cerr << "錯誤：--critical-path 的引數不是有效整數：" << argv[i] << "\n";
                 return 1;
             }
         } else {
@@ -120,6 +130,15 @@ int main(int argc, char* argv[]) {
             std::cout << "╚══════════════════════════════════════════════════════╝\n\n";
             if (!circuit.topologicalSortDFS(true, maxSteps)) return 1;
 
+            std::cout << "\n";
+            std::cout << "╔══════════════════════════════════════════════════════╗\n";
+            std::cout << "║  --trace 模式：Critical Path DP 追蹤                ║\n";
+            std::cout << "╚══════════════════════════════════════════════════════╝\n";
+            auto paths = computeTopKCriticalPaths(
+                circuit.getAllGates(), circuit.getInputs(),
+                circuit.getOutputs(), topK, /*trace=*/true);
+            printCriticalPaths(paths);
+
             std::cout << "\n（追蹤模式下跳過真值表與效能比較，避免輸出過多）\n";
             if (maxSteps >= 0)
                 std::cout << "已套用 --max-steps " << maxSteps << "：超過此步數後排序繼續但不再印出。\n";
@@ -129,6 +148,10 @@ int main(int argc, char* argv[]) {
             circuit.printInfo();
             std::cout << "=== 真值表 ===\n";
             circuit.generateTruthTable();
+            auto paths = computeTopKCriticalPaths(
+                circuit.getAllGates(), circuit.getInputs(),
+                circuit.getOutputs(), topK);
+            printCriticalPaths(paths);
             circuit.performanceComparison();
         }
         return 0;
@@ -181,6 +204,10 @@ int main(int argc, char* argv[]) {
     circuit.printInfo();
     std::cout << "=== 真值表 ===\n";
     circuit.generateTruthTable();
+    auto paths = computeTopKCriticalPaths(
+        circuit.getAllGates(), circuit.getInputs(),
+        circuit.getOutputs(), topK);
+    printCriticalPaths(paths);
     circuit.performanceComparison();
     return 0;
 }

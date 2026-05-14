@@ -43,7 +43,7 @@ public:
 // ============================================================
 class AndGate : public Gate {
 public:
-    AndGate(std::string name) : Gate(name, "AND") {}
+    AndGate(std::string name) : Gate(name, "AND", 2) {}
     bool compute(const std::vector<bool>& inputs) override {
         for (bool val : inputs) { if (!val) return false; }
         return true;
@@ -52,7 +52,7 @@ public:
 
 class OrGate : public Gate {
 public:
-    OrGate(std::string name) : Gate(name, "OR") {}
+    OrGate(std::string name) : Gate(name, "OR", 2) {}
     bool compute(const std::vector<bool>& inputs) override {
         for (bool val : inputs) { if (val) return true; }
         return false;
@@ -61,7 +61,7 @@ public:
 
 class NotGate : public Gate {
 public:
-    NotGate(std::string name) : Gate(name, "NOT") {}
+    NotGate(std::string name) : Gate(name, "NOT", 1) {}
     bool compute(const std::vector<bool>& inputs) override {
         return !inputs[0];
     }
@@ -69,7 +69,7 @@ public:
 
 class XorGate : public Gate {
 public:
-    XorGate(std::string name) : Gate(name, "XOR") {}
+    XorGate(std::string name) : Gate(name, "XOR", 3) {}
     bool compute(const std::vector<bool>& inputs) override {
         bool result = false;
         for (bool val : inputs) { result = result ^ val; }
@@ -79,7 +79,7 @@ public:
 
 class NandGate : public Gate {
 public:
-    NandGate(std::string name) : Gate(name, "NAND") {}
+    NandGate(std::string name) : Gate(name, "NAND", 2) {}
     bool compute(const std::vector<bool>& inputs) override {
         for (bool val : inputs) { if (!val) return true; }
         return false;
@@ -88,7 +88,7 @@ public:
 
 class NorGate : public Gate {
 public:
-    NorGate(std::string name) : Gate(name, "NOR") {}
+    NorGate(std::string name) : Gate(name, "NOR", 2) {}
     bool compute(const std::vector<bool>& inputs) override {
         for (bool val : inputs) { if (val) return false; }
         return true;
@@ -530,6 +530,14 @@ public:
             }
         }
         return true;
+    }
+
+    // ── 取得所有閘的裸指標（供 critical_path.h 使用，不轉移所有權）──
+    std::vector<Gate*> getAllGates() const {
+        std::vector<Gate*> result;
+        result.reserve(gates.size());
+        for (const auto& g : gates) result.push_back(g.get());
+        return result;
     }
 
     // ── 印出電路資訊 ─────────────────────────────────────────

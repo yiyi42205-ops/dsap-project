@@ -12,7 +12,7 @@ TESTS    = tests
 all: main
 
 # ── 主程式 ───────────────────────────────────────────────────────
-main: src/main.cpp src/circuit.h
+main: src/main.cpp src/circuit.h src/critical_path.h
 	$(CXX) $(CXXFLAGS) src/main.cpp -o simulator
 
 # ── 任務 B：Ablation Study benchmarks ───────────────────────────
