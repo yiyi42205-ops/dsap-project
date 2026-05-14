@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -70,13 +70,11 @@ function buildRFNodes(circuitData, signalMap, highlightedId, onInputToggle) {
       position: positions[n.id] ?? { x: 0, y: 0 },
       data: {
         label: (
-          <div
-            title={tooltip}
-            onClick={isInput ? () => onInputToggle(n.id) : undefined}
-          >
+          <div title={tooltip}>
             {label.split('\n').map((l, i) => <div key={i}>{l}</div>)}
           </div>
         ),
+        isInput,
       },
       style: nodeStyle(n.type, n.id === highlightedId, isInput),
     };
@@ -119,6 +117,11 @@ export default function CircuitViewer({
     setEdges(buildRFEdges(circuitData, signalMap, criticalEdgeSet));
   }, [circuitData, signalMap, highlightedNodeId, criticalEdgeSet, onInputToggle]);
 
+  // 用 onNodeClick 處理 INPUT toggle，避免被 React Flow 攔截
+  const handleNodeClick = useCallback((_event, node) => {
+    if (node.data?.isInput) onInputToggle(node.id);
+  }, [onInputToggle]);
+
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <ReactFlow
@@ -126,6 +129,7 @@ export default function CircuitViewer({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={handleNodeClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         nodesDraggable={false}
