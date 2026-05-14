@@ -1,0 +1,55 @@
+{
+  "circuit_name": "mux_2to1",
+  "nodes": [
+    {"id": "IN_A", "type": "INPUT", "delay": 0},
+    {"id": "IN_B", "type": "INPUT", "delay": 0},
+    {"id": "IN_SEL", "type": "INPUT", "delay": 0},
+    {"id": "NOT_1", "type": "NOT", "delay": 1},
+    {"id": "AND_1", "type": "AND", "delay": 2},
+    {"id": "AND_2", "type": "AND", "delay": 2},
+    {"id": "OR_1", "type": "OR", "delay": 2},
+    {"id": "OUT_Y", "type": "OUTPUT", "delay": 0}
+  ],
+  "edges": [
+    {"from": "IN_SEL", "to": "NOT_1"},
+    {"from": "NOT_1", "to": "AND_1"},
+    {"from": "IN_A", "to": "AND_1"},
+    {"from": "IN_SEL", "to": "AND_2"},
+    {"from": "IN_B", "to": "AND_2"},
+    {"from": "AND_1", "to": "OR_1"},
+    {"from": "AND_2", "to": "OR_1"},
+    {"from": "OR_1", "to": "OUT_Y"}
+  ],
+  "topo_order_bfs": ["IN_A", "IN_B", "IN_SEL", "NOT_1", "AND_2", "AND_1", "OR_1"],
+  "topo_order_dfs": ["IN_A", "IN_B", "IN_SEL", "AND_2", "NOT_1", "AND_1", "OR_1"],
+  "critical_paths": [
+    {
+      "rank": 1,
+      "delay": 5,
+      "max_freq_mhz": 200,
+      "path": ["IN_SEL", "NOT_1", "AND_1", "OR_1", "OUT_Y"]
+    },
+    {
+      "rank": 2,
+      "delay": 4,
+      "max_freq_mhz": 250,
+      "path": ["IN_A", "AND_1", "OR_1", "OUT_Y"]
+    },
+    {
+      "rank": 3,
+      "delay": 4,
+      "max_freq_mhz": 250,
+      "path": ["IN_SEL", "AND_2", "OR_1", "OUT_Y"]
+    }
+  ],
+  "truth_table": [
+    {"inputs": {"A": 0, "B": 0, "SEL": 0}, "outputs": {"Y": 0}},
+    {"inputs": {"A": 0, "B": 0, "SEL": 1}, "outputs": {"Y": 0}},
+    {"inputs": {"A": 0, "B": 1, "SEL": 0}, "outputs": {"Y": 0}},
+    {"inputs": {"A": 0, "B": 1, "SEL": 1}, "outputs": {"Y": 1}},
+    {"inputs": {"A": 1, "B": 0, "SEL": 0}, "outputs": {"Y": 1}},
+    {"inputs": {"A": 1, "B": 0, "SEL": 1}, "outputs": {"Y": 0}},
+    {"inputs": {"A": 1, "B": 1, "SEL": 0}, "outputs": {"Y": 1}},
+    {"inputs": {"A": 1, "B": 1, "SEL": 1}, "outputs": {"Y": 1}}
+  ]
+}
