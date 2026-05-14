@@ -1,122 +1,153 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect, useCallback, useRef } from 'react';
+import CircuitViewer from './CircuitViewer.jsx';
+import ControlPanel from './ControlPanel.jsx';
+import { propagateSignals } from './gateLogic.js';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+const CIRCUITS = [
+  { label: 'Half Adder',  file: 'half_adder.json' },
+  { label: 'Full Adder',  file: 'full_adder.json' },
+  { label: '2-to-1 MUX', file: 'mux_2to1.json' },
+  { label: '4-bit Adder', file: '4bit_adder.json' },
+];
 
+export default function App() {
+  const [circuitIdx, setCircuitIdx] = useState(0);
+  const [circuitData, setCircuitData] = useState(null);
+
+  // inputValues: { [nodeId]: boolean }
+  const [inputValues, setInputValues] = useState({});
+  // signalMap: Map<nodeId, boolean>
+  const [signalMap, setSignalMap] = useState(null);
+
+  // 動畫
+  const [highlightedNodeId, setHighlightedNodeId] = useState(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const animTimers = useRef([]);
+
+  // Critical Path
+  const [selectedCriticalPathIdx, setSelectedCriticalPathIdx] = useState(null);
+  const [criticalEdgeSet, setCriticalEdgeSet] = useState(null);
+
+  // ── 載入電路 ─────────────────────────────────────────────
+  useEffect(() => {
+    const file = CIRCUITS[circuitIdx].file;
+    fetch(`/circuits/${file}`)
+      .then(r => r.json())
+      .then(data => {
+        setCircuitData(data);
+        const initInputs = {};
+        for (const n of data.nodes) {
+          if (n.type === 'INPUT') initInputs[n.id] = false;
+        }
+        setInputValues(initInputs);
+        setSelectedCriticalPathIdx(null);
+        setCriticalEdgeSet(null);
+        stopAnimation();
+      });
+  }, [circuitIdx]);
+
+  // ── 訊號傳播 ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!circuitData) return;
+    const map = propagateSignals(circuitData, inputValues);
+    setSignalMap(map);
+  }, [circuitData, inputValues]);
+
+  // ── INPUT toggle ─────────────────────────────────────────
+  const handleInputToggle = useCallback((nodeId) => {
+    setInputValues(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
+  }, []);
+
+  // ── 動畫 ─────────────────────────────────────────────────
+  function stopAnimation() {
+    animTimers.current.forEach(clearTimeout);
+    animTimers.current = [];
+    setHighlightedNodeId(null);
+    setIsAnimating(false);
+  }
+
+  function playAnimation(order) {
+    if (isAnimating) return;
+    stopAnimation();
+    setIsAnimating(true);
+    order.forEach((nodeId, i) => {
+      const t = setTimeout(() => {
+        setHighlightedNodeId(nodeId);
+        if (i === order.length - 1) {
+          const t2 = setTimeout(() => {
+            setHighlightedNodeId(null);
+            setIsAnimating(false);
+          }, 600);
+          animTimers.current.push(t2);
+        }
+      }, i * 600);
+      animTimers.current.push(t);
+    });
+  }
+
+  const handlePlayBFS = () => circuitData && playAnimation(circuitData.topo_order_bfs);
+  const handlePlayDFS = () => circuitData && playAnimation(circuitData.topo_order_dfs);
+
+  // ── Critical Path 選取 ───────────────────────────────────
+  const handleSelectCriticalPath = useCallback((idx) => {
+    if (!circuitData) return;
+    if (idx === selectedCriticalPathIdx) {
+      setSelectedCriticalPathIdx(null);
+      setCriticalEdgeSet(null);
+      return;
+    }
+    const cp = circuitData.critical_paths[idx];
+    const edgeSet = new Set();
+    for (let i = 0; i < cp.path.length - 1; i++) {
+      edgeSet.add(`${cp.path[i]}__${cp.path[i + 1]}`);
+    }
+    setSelectedCriticalPathIdx(idx);
+    setCriticalEdgeSet(edgeSet);
+  }, [circuitData, selectedCriticalPathIdx]);
+
+  // ── Render ───────────────────────────────────────────────
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+    <div className="app-root">
+      <header className="app-header">
+        <span className="app-title">數位邏輯電路模擬器</span>
+        <select
+          className="circuit-select"
+          value={circuitIdx}
+          onChange={e => setCircuitIdx(Number(e.target.value))}
         >
-          Count is {count}
-        </button>
-      </section>
+          {CIRCUITS.map((c, i) => (
+            <option key={i} value={i}>{c.label}</option>
+          ))}
+        </select>
+        {circuitData && (
+          <span className="circuit-info">
+            {circuitData.nodes.filter(n => n.type === 'INPUT').length} inputs ·{' '}
+            {circuitData.nodes.filter(n => !['INPUT', 'OUTPUT'].includes(n.type)).length} gates ·{' '}
+            {circuitData.edges.length} edges
+          </span>
+        )}
+      </header>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <div className="app-body">
+        <div className="viewer-area">
+          <CircuitViewer
+            circuitData={circuitData}
+            signalMap={signalMap}
+            highlightedNodeId={highlightedNodeId}
+            criticalEdgeSet={criticalEdgeSet}
+            onInputToggle={handleInputToggle}
+          />
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <ControlPanel
+          circuitData={circuitData}
+          onPlayBFS={handlePlayBFS}
+          onPlayDFS={handlePlayDFS}
+          isAnimating={isAnimating}
+          onSelectCriticalPath={handleSelectCriticalPath}
+          selectedCriticalPathIdx={selectedCriticalPathIdx}
+        />
+      </div>
+    </div>
+  );
 }
-
-export default App
