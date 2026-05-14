@@ -2,73 +2,103 @@
 // 不依賴任何外部函式庫
 //
 // 策略：
-//   INPUT  → column 0
-//   OUTPUT → column max
-//   gate   → 1 + max(column of all predecessor nodes)
-// 同 column 內節點垂直等間距排列
+//   1. INPUT → column 0，OUTPUT → column max，gate → 1 + max(col of preds)
+//   2. 由左到右逐 column 排列：
+//      每個節點的 y 順序依「所有前驅節點的平均 y」排序，
+//      讓連線盡量平行、減少交叉
 
-const COL_WIDTH  = 180;  // px，水平間距
-const ROW_HEIGHT = 90;   // px，垂直間距
+const COL_WIDTH  = 200;  // px，水平間距
+const ROW_HEIGHT = 120;  // px，垂直間距
 const OFFSET_X   = 40;
-const OFFSET_Y   = 40;
+const CENTER_Y   = 400;  // 整體垂直置中基準
 
 // buildLayout(circuitData) → { [nodeId]: {x, y} }
 export function buildLayout(circuitData) {
   const { nodes, edges } = circuitData;
-  const nodeById = new Map(nodes.map(n => [n.id, n]));
 
-  // 建立 predecessor map: nodeId → [predecessorId, ...]
+  // ── predecessor map: nodeId → [fromId, ...] ──────────────
   const preds = new Map(nodes.map(n => [n.id, []]));
   for (const e of edges) {
     if (preds.has(e.to)) preds.get(e.to).push(e.from);
   }
 
-  // 計算每個節點的 column
+  // ── Step 1：計算每個節點的 column ──────────────────────
   const col = new Map();
-  const maxCol = { val: 0 };
 
-  // INPUT 固定 col 0
+  // INPUT → col 0
   for (const n of nodes) {
     if (n.type === 'INPUT') col.set(n.id, 0);
   }
 
-  // OUTPUT 先標記，最後設為 max+1
   const outputIds = new Set(nodes.filter(n => n.type === 'OUTPUT').map(n => n.id));
+  let maxGateCol = 0;
 
-  // 用 topo_order_bfs 計算 gate 的 column（保證前驅已算好）
+  // gate：沿 topo_order_bfs 計算（保證前驅已算好）
   for (const id of circuitData.topo_order_bfs) {
     if (col.has(id)) continue; // INPUT 已設
     const predCols = preds.get(id).map(pid => col.get(pid) ?? 0);
     const c = predCols.length > 0 ? Math.max(...predCols) + 1 : 1;
     col.set(id, c);
-    if (c > maxCol.val) maxCol.val = c;
+    if (c > maxGateCol) maxGateCol = c;
   }
 
-  // OUTPUT 節點放在最右 column（max gate col + 1）
-  const outputCol = maxCol.val + 1;
-  for (const id of outputIds) {
-    col.set(id, outputCol);
-  }
+  // OUTPUT → 最右 column
+  const outputCol = maxGateCol + 1;
+  for (const id of outputIds) col.set(id, outputCol);
 
-  // 依 column 分組，計算每 column 的節點列表
-  const colGroups = new Map();
+  // ── Step 2：依 column 分組 ──────────────────────────────
+  const colGroups = new Map();  // col → [nodeId, ...]
   for (const n of nodes) {
     const c = col.get(n.id) ?? 0;
     if (!colGroups.has(c)) colGroups.set(c, []);
     colGroups.get(c).push(n.id);
   }
 
-  // 計算 (x, y) 座標
-  const positions = {};
-  for (const [c, ids] of colGroups) {
-    const totalH = (ids.length - 1) * ROW_HEIGHT;
-    ids.forEach((id, i) => {
-      positions[id] = {
-        x: OFFSET_X + c * COL_WIDTH,
-        y: OFFSET_Y + i * ROW_HEIGHT - totalH / 2 + 300, // 垂直置中在 y=300
-      };
+  // ── Step 3：由左到右，每列依前驅平均 y 排序後分配 y ────
+  const posY = new Map(); // nodeId → y
+
+  // 先處理 col 0（INPUT，沒有前驅，按原始順序垂直置中）
+  const col0 = colGroups.get(0) ?? [];
+  assignY(col0, null, posY, CENTER_Y, ROW_HEIGHT);
+
+  // 逐 column 排序
+  const sortedCols = [...colGroups.keys()].sort((a, b) => a - b);
+  for (const c of sortedCols) {
+    if (c === 0) continue; // 已處理
+    const ids = colGroups.get(c);
+
+    // 計算每個節點的「前驅平均 y」作為排序鍵
+    const sortKey = ids.map(id => {
+      const ps = preds.get(id) ?? [];
+      const knownYs = ps.map(pid => posY.get(pid)).filter(y => y !== undefined);
+      const avgY = knownYs.length > 0
+        ? knownYs.reduce((a, b) => a + b, 0) / knownYs.length
+        : CENTER_Y;
+      return { id, avgY };
     });
+
+    sortKey.sort((a, b) => a.avgY - b.avgY);
+    assignY(sortKey.map(s => s.id), null, posY, CENTER_Y, ROW_HEIGHT);
+  }
+
+  // ── Step 4：組合最終 positions ──────────────────────────
+  const positions = {};
+  for (const n of nodes) {
+    const c = col.get(n.id) ?? 0;
+    positions[n.id] = {
+      x: OFFSET_X + c * COL_WIDTH,
+      y: posY.get(n.id) ?? CENTER_Y,
+    };
   }
 
   return positions;
+}
+
+// 將 ids 陣列垂直置中排列，結果寫入 posY
+function assignY(ids, _unused, posY, centerY, rowHeight) {
+  const total = ids.length;
+  const startY = centerY - ((total - 1) * rowHeight) / 2;
+  ids.forEach((id, i) => {
+    posY.set(id, startY + i * rowHeight);
+  });
 }
