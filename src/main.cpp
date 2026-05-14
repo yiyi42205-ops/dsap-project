@@ -1,5 +1,6 @@
 #include "circuit.h"
 #include "critical_path.h"
+#include "json_export.h"
 
 // ============================================================
 // 4. 內建範例電路
@@ -76,16 +77,12 @@ Circuit create4BitAdder() {
 // 5. 主程式
 // ============================================================
 int main(int argc, char* argv[]) {
-    std::cout << "╔══════════════════════════════════════╗\n";
-    std::cout << "║  數位邏輯電路模擬器 v2.0             ║\n";
-    std::cout << "║  Digital Logic Circuit Simulator     ║\n";
-    std::cout << "╚══════════════════════════════════════╝\n\n";
-
     // ── 解析命令列引數 ───────────────────────────────────────
-    bool traceMode = false;
-    int  maxSteps  = -1;   // -1 = 無限制
-    int  topK      = 3;    // Critical Path Top-K，預設 3
-    std::string fileArg = "";
+    bool traceMode  = false;
+    int  maxSteps   = -1;  // -1 = 無限制
+    int  topK       = 3;   // Critical Path Top-K，預設 3
+    std::string fileArg    = "";
+    std::string exportJson = ""; // --export-json <path>，空字串表示不匯出
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--trace") {
@@ -106,10 +103,32 @@ int main(int argc, char* argv[]) {
                 std::cerr << "錯誤：--critical-path 的引數不是有效整數：" << argv[i] << "\n";
                 return 1;
             }
+        } else if (arg == "--export-json" && i + 1 < argc) {
+            exportJson = argv[++i];
         } else {
             fileArg = arg;
         }
     }
+
+    // ── --export-json 模式：靜默匯出，不印其他輸出 ──────────
+    if (!exportJson.empty()) {
+        if (fileArg.empty()) {
+            std::cerr << "錯誤：--export-json 需要指定電路檔案路徑\n";
+            return 1;
+        }
+        Circuit circuit;
+        if (!circuit.loadFromFile(fileArg)) return 1;
+        std::string name = circuitNameFromPath(fileArg);
+        if (!exportCircuitToJson(circuit, name, exportJson, topK)) return 1;
+        std::cout << "Exported to " << exportJson << "\n";
+        return 0;
+    }
+
+    // ── 一般模式：印 banner ──────────────────────────────────
+    std::cout << "╔══════════════════════════════════════╗\n";
+    std::cout << "║  數位邏輯電路模擬器 v2.0             ║\n";
+    std::cout << "║  Digital Logic Circuit Simulator     ║\n";
+    std::cout << "╚══════════════════════════════════════╝\n\n";
 
     if (!fileArg.empty()) {
         std::cout << "從檔案載入電路：" << fileArg << "\n";

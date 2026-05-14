@@ -12,8 +12,8 @@ TESTS    = tests
 all: main
 
 # ── 主程式 ───────────────────────────────────────────────────────
-main: src/main.cpp src/circuit.h src/critical_path.h
-	$(CXX) $(CXXFLAGS) src/main.cpp -o simulator
+main: src/main.cpp src/json_export.cpp src/circuit.h src/critical_path.h src/json_export.h
+	$(CXX) $(CXXFLAGS) src/main.cpp src/json_export.cpp -o simulator
 
 # ── 任務 B：Ablation Study benchmarks ───────────────────────────
 benchmarks: bench_hash bench_topo bench_ordered

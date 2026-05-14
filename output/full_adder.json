@@ -1,0 +1,61 @@
+{
+  "circuit_name": "full_adder",
+  "nodes": [
+    {"id": "IN_A", "type": "INPUT", "delay": 0},
+    {"id": "IN_B", "type": "INPUT", "delay": 0},
+    {"id": "IN_CIN", "type": "INPUT", "delay": 0},
+    {"id": "XOR_1", "type": "XOR", "delay": 3},
+    {"id": "XOR_2", "type": "XOR", "delay": 3},
+    {"id": "AND_1", "type": "AND", "delay": 2},
+    {"id": "AND_2", "type": "AND", "delay": 2},
+    {"id": "OR_1", "type": "OR", "delay": 2},
+    {"id": "OUT_S", "type": "OUTPUT", "delay": 0},
+    {"id": "OUT_COUT", "type": "OUTPUT", "delay": 0}
+  ],
+  "edges": [
+    {"from": "IN_A", "to": "XOR_1"},
+    {"from": "IN_B", "to": "XOR_1"},
+    {"from": "XOR_1", "to": "XOR_2"},
+    {"from": "IN_CIN", "to": "XOR_2"},
+    {"from": "IN_A", "to": "AND_1"},
+    {"from": "IN_B", "to": "AND_1"},
+    {"from": "XOR_1", "to": "AND_2"},
+    {"from": "IN_CIN", "to": "AND_2"},
+    {"from": "AND_1", "to": "OR_1"},
+    {"from": "AND_2", "to": "OR_1"},
+    {"from": "XOR_2", "to": "OUT_S"},
+    {"from": "OR_1", "to": "OUT_COUT"}
+  ],
+  "topo_order_bfs": ["IN_A", "IN_B", "IN_CIN", "XOR_1", "AND_1", "XOR_2", "AND_2", "OR_1"],
+  "topo_order_dfs": ["IN_A", "IN_B", "IN_CIN", "AND_1", "XOR_1", "AND_2", "OR_1", "XOR_2"],
+  "critical_paths": [
+    {
+      "rank": 1,
+      "delay": 7,
+      "max_freq_mhz": 142,
+      "path": ["IN_A", "XOR_1", "AND_2", "OR_1", "OUT_COUT"]
+    },
+    {
+      "rank": 2,
+      "delay": 7,
+      "max_freq_mhz": 142,
+      "path": ["IN_B", "XOR_1", "AND_2", "OR_1", "OUT_COUT"]
+    },
+    {
+      "rank": 3,
+      "delay": 6,
+      "max_freq_mhz": 166,
+      "path": ["IN_A", "XOR_1", "XOR_2", "OUT_S"]
+    }
+  ],
+  "truth_table": [
+    {"inputs": {"A": 0, "B": 0, "CIN": 0}, "outputs": {"S": 0, "COUT": 0}},
+    {"inputs": {"A": 0, "B": 0, "CIN": 1}, "outputs": {"S": 1, "COUT": 0}},
+    {"inputs": {"A": 0, "B": 1, "CIN": 0}, "outputs": {"S": 1, "COUT": 0}},
+    {"inputs": {"A": 0, "B": 1, "CIN": 1}, "outputs": {"S": 0, "COUT": 1}},
+    {"inputs": {"A": 1, "B": 0, "CIN": 0}, "outputs": {"S": 1, "COUT": 0}},
+    {"inputs": {"A": 1, "B": 0, "CIN": 1}, "outputs": {"S": 0, "COUT": 1}},
+    {"inputs": {"A": 1, "B": 1, "CIN": 0}, "outputs": {"S": 0, "COUT": 1}},
+    {"inputs": {"A": 1, "B": 1, "CIN": 1}, "outputs": {"S": 1, "COUT": 1}}
+  ]
+}

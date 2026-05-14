@@ -146,6 +146,7 @@ Prototype 階段預計完成以下可驗證的功能：
 | 迴圈偵測 | BFS 和 DFS 均支援，5 種不同拓撲的迴圈測試 |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
 | **關鍵路徑分析（Critical Path）** | DAG DP 求最長延遲 + Max-Heap Top-K 反向路徑搜尋；各閘有實際傳播延遲（NOT=1、AND/OR/NAND/NOR=2、XOR=3 ns）；輸出路徑序列、總延遲、最高工作頻率 |
+| **JSON 匯出** | `--export-json <path>` 將電路的 nodes / edges / 拓撲序 / Critical Paths / 真值表匯出為 JSON，供前端視覺化使用；自行實作 JSON writer，無第三方依賴 |
 | `--trace` 模式 | 逐步印出 BFS / DFS 排序的每一步決策，以及 Critical Path DP 計算過程 |
 | `--critical-path K` | 指定回傳前 K 條最長路徑（預設 K=3） |
 | 效能比較 | BFS vs DFS 拓撲排序時間，含平均值和標準差 |
@@ -221,6 +222,26 @@ Critical Path 輸出範例（全加器，預設 K=3）：
 ```
 
 > 注意：`--trace` 模式下跳過真值表和效能比較，建議用於小型電路（< 20 閘）。
+
+#### JSON 匯出
+
+```bash
+./simulator --export-json output/full_adder.json src/circuits/full_adder.txt
+# 輸出：Exported to output/full_adder.json
+```
+
+匯出 JSON 結構：
+- `nodes`：INPUT / 邏輯閘 / OUTPUT 節點，含 id、type、delay
+- `edges`：閘間有向邊（中間訊號線 W1/W2/... 折疊為直接邊）
+- `topo_order_bfs` / `topo_order_dfs`：兩種排序結果的節點 id 序列
+- `critical_paths`：Top-K 最長路徑，含 rank / delay / max_freq_mhz / path
+- `truth_table`：所有 2^n 種輸入組合的模擬結果
+
+可搭配 `--critical-path K` 控制匯出幾條路徑：
+
+```bash
+./simulator --export-json output/full_adder.json --critical-path 5 src/circuits/full_adder.txt
+```
 
 #### 執行 Benchmark（任務 D / B）
 
