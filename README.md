@@ -133,38 +133,27 @@ Prototype 階段預計完成以下可驗證的功能：
 
 ### 專案說明
 
-本專題實作了一個 C++ 命令列數位邏輯電路模擬器，搭配 React 視覺化前端，以「用電路學資料結構」為核心定位：
-電路本身是一個 **有向無環圖（DAG）**，模擬器透過**拓撲排序**決定邏輯閘的計算順序，**Heap** 找出延遲最長的關鍵路徑，
-讓使用者能清楚看到演算法如何驅動硬體模擬。
+本專題實作了一個 C++ 命令列數位邏輯電路模擬器，搭配 React 視覺化前端，以「用電路學資料結構」為核心定位：電路本身是一個 **有向無環圖（DAG）**，模擬器透過**拓撲排序**決定邏輯閘的計算順序，**Heap** 找出延遲最長的關鍵路徑，讓使用者能清楚看到演算法如何驅動硬體模擬。
 
 ### 主要研究發現
 
-本專題的實驗階段產生了三個值得記錄的發現，它們也是本專題相對於既有電路模擬器（Logisim / CircuitVerse）最有區別性的貢獻：
+本專題的實驗階段產生了三個值得記錄的發現：
 
-**1. 演算法選擇敏感於 DAG 結構，而非規模**
+**1. 演算法效能取決於 DAG 結構，而非規模**
 
-Prototype 階段的初步觀察是「規模越大 DFS 領先 BFS 越多」（4-bit 加法器在 20 閘下 DFS 快 1.5x）。但在 `scale_bench`（10–5000 閘隨機 DAG）下，加速比穩定在 1.1–1.2x，**與規模幾乎無關**，假設被推翻。
+Prototype 階段觀察「規模越大 DFS 越領先」（4-bit 加法器 20 閘下 DFS 快 1.5x），但 `scale_bench`（10–5000 閘隨機 DAG）顯示加速比穩定在 1.1–1.2x、與規模幾乎無關——假設被推翻。
 
-進一步的 `structural_bench` 揭示真正的變因是 DAG 形狀：
-- **Random / Wide Fanout**：DFS 比 BFS 快約 8–15%，符合「BFS 需要維護 in-degree 計數與 queue 操作，常數因子較高」的理論預期。
-- **Deep Chain**：三者幾乎相同（±5%），因為深度極深時遞迴 overhead 抵消了 cache locality 優勢。
-
-這個結果的意義超出本專題本身——任何處理 DAG 拓撲排序的系統（EDA 工具、build system 如 Bazel / Ninja、ML 框架的 autograd），其演算法選擇都不能只看「規模」這一個維度。
+進一步的 `structural_bench` 揭示真正變因是 DAG 形狀：Random / Wide Fanout 下 DFS 比 BFS 快 8–15%；Deep Chain 下三者幾乎相同（±5%）。此結論在實驗規模（≤5000 閘）與測試結構內成立，推廣到更大規模或其他 DAG 應用領域（build system 依賴解析、ML 框架計算圖排程）需進一步驗證。
 
 **2. 理論等價不蘊含實作等價**
 
-DFS 拓撲排序的遞迴版與迭代版（顯式 stack）理論上等價，皆為 O(V+E)。但實測在 deep chain 5000 閘下，迭代版比遞迴版快 ~4.5%（比 BFS 快 ~5.5%），差距雖小但方向穩定，且隨深度增加而擴大。
-
-原因是遞迴版透過 `std::function` 包裝會引入函式呼叫開銷與 cache miss，而顯式 stack 把這些開銷消除。此實驗呼應課程「遞迴可由顯式 stack 模擬」的核心概念，並進一步說明：**選對演算法只是第一步，選對實作才能發揮理論優勢**。
+DFS 的遞迴版與迭代版理論等價、皆為 O(V+E)，但實測在 deep chain 5000 閘下迭代版比遞迴版快 ~4.5%，且差距隨深度增加而擴大。原因是遞迴版透過 `std::function` 包裝引入額外呼叫開銷與 cache miss。這呼應課程「遞迴可由顯式 stack 模擬」的概念，並進一步說明：**選對演算法只是第一步，選對實作才能發揮理論優勢**。
 
 **3. Critical Path 將抽象資料結構連到具體物理量**
 
-Top-K 最長路徑搜尋是本專案中資料結構協作最緊密的部分：先用拓撲排序確定計算順序，再用 DP 求每個節點的最長到達延遲，最後以 Max-Heap 反向取出延遲最大的 K 條完整路徑。
+Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓撲排序確定計算順序 → DP 求每個節點的最長到達延遲 → Max-Heap 反向取出延遲最大的 K 條完整路徑。
 
-這個演算法在電路領域稱為 critical path 分析、用於判斷時脈瓶頸，但其本質是純粹的資料結構問題——同樣的演算法也用於 build system 的關鍵任務調度、PERT 專案管理的關鍵路徑、編譯器的 instruction scheduling。
-
-DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電路的最高工作頻率（MHz）。例如全加器的 critical path 為 7 ns，最高頻率即為 142 MHz。
-現代 CPU 動輒上億個邏輯閘、跑 5 GHz，本質上就是這個演算法在百萬倍規模下的應用。資料結構不是抽象練習，是決定硬體效能的數學基礎。
+這個演算法的輸出可直接換算成電路最高工作頻率（全加器 critical path 7 ns → 142 MHz）。現代 CPU 的時脈設計本質上是同一個「DAG 最長路徑」問題的延伸（工業界 Static Timing Analysis 還會處理 false path、setup/hold time、clock skew 等）。資料結構不是抽象練習，是決定硬體效能的數學基礎。
 
 ### 最終實作的功能
 
@@ -172,7 +161,7 @@ DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電�
 |------|------|
 | 6 種邏輯閘 | AND / OR / NOT / XOR / NAND / NOR，OOP 繼承 + 虛擬函式 |
 | 電路描述檔解析 | 自訂 `.txt` 格式，支援 INPUT / OUTPUT / GATE 關鍵字 |
-| BFS 拓撲排序 | Kahn's Algorithm，O(V+E)，deque + inDegree map |
+| BFS 拓撲排序 | Kahn's Algorithm,O(V+E),deque + inDegree map |
 | DFS 拓撲排序（遞迴） | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK）、含環偵測 |
 | DFS 拓撲排序（迭代） | 顯式 `std::stack` + 三色標記，消除遞迴 overhead |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
@@ -180,6 +169,7 @@ DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電�
 | `--trace` 模式 | 逐步印出 BFS / DFS 排序決策與 Critical Path DP 過程 |
 | **效能實驗** | 大規模測試（10–5000 閘）+ 結構性對照實驗（random / deep_chain / wide_fanout）× 三種演算法，輸出 log-log 圖、加速比圖、grouped bar chart |
 | **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、BFS/DFS 排序動畫、Critical Path 高亮；C++ 透過 `--export-json` 匯出資料給前端 |
+
 ---
 
 ### 使用方式
@@ -236,38 +226,15 @@ Critical Path 輸出範例（全加器，預設 K=3）：
 ./simulator --trace src/circuits/full_adder.txt
 ```
 
-`--trace` 模式下會逐步印出 BFS 排序、DFS 排序，以及 Critical Path DP 計算每個節點延遲的過程：
-
-```
-[CP Trace] DP 計算各閘最長到達延遲（拓撲順序）：
-  XOR_1 (XOR, delay=3)  incoming_max=0  dist=3
-  AND_1 (AND, delay=2)  incoming_max=0  dist=2
-  XOR_2 (XOR, delay=3)  incoming_max=3  dist=6
-  AND_2 (AND, delay=2)  incoming_max=3  dist=5
-  OR_1 (OR, delay=2)  incoming_max=5  dist=7
-```
-
-> 注意：`--trace` 模式下跳過真值表和效能比較，建議用於小型電路（< 20 閘）。
+逐步印出 BFS 排序、DFS 排序，以及 Critical Path DP 計算每個節點延遲的過程。`--trace` 模式下跳過真值表和效能比較，建議用於小型電路（< 20 閘）。
 
 #### JSON 匯出
 
 ```bash
 ./simulator --export-json output/full_adder.json src/circuits/full_adder.txt
-# 輸出：Exported to output/full_adder.json
 ```
 
-匯出 JSON 結構：
-- `nodes`：INPUT / 邏輯閘 / OUTPUT 節點，含 id、type、delay
-- `edges`：閘間有向邊（中間訊號線 W1/W2/... 折疊為直接邊）
-- `topo_order_bfs` / `topo_order_dfs`：兩種排序結果的節點 id 序列
-- `critical_paths`：Top-K 最長路徑，含 rank / delay / max_freq_mhz / path
-- `truth_table`：所有 2^n 種輸入組合的模擬結果
-
-可搭配 `--critical-path K` 控制匯出幾條路徑：
-
-```bash
-./simulator --export-json output/full_adder.json --critical-path 5 src/circuits/full_adder.txt
-```
+匯出內容：`nodes`、`edges`、`topo_order_bfs` / `topo_order_dfs`、`critical_paths`（Top-K）、`truth_table`。可搭配 `--critical-path K` 控制匯出幾條路徑，供 React 前端使用。
 
 #### 執行 Benchmark
 
@@ -313,7 +280,6 @@ npm run dev     # 開啟 http://localhost:5173
 | **拓撲排序（BFS/DFS）** | 決定閘的計算順序，兩種演算法的完整實作與比較 |
 | **雜湊表（Hash Map）** | `unordered_map` 儲存訊號值與元件名稱，O(1) 查詢 |
 | **平衡二元搜尋樹（BST）** | `std::map`（紅黑樹）管理訊號線名稱，維持有序以利真值表輸出 |
-實驗三 |
 | **堆積與優先權佇列（Heap）** | Critical Path Top-K 搜尋的核心：`std::priority_queue`（Max-Heap）按延遲上界排序，確保前 K 個彈出的完整路徑即為最長 K 條 |
 | **佇列（Queue）** | BFS 的核心資料結構，`deque` 實作 |
 | **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；迭代版用 `std::stack` 顯式管理 |
@@ -321,7 +287,7 @@ npm run dev     # 開啟 http://localhost:5173
 | **演算法複雜度分析** | O(V+E) 線性的理論分析與實測驗證；log-log 圖呈現 |
 | **迴圈偵測（三色標記）** | DFS 的 WHITE/GRAY/BLACK 標記，back edge 偵測 |
 | **統計測量** | warm-up / 正式測量 / 均值 / 標準差，避免系統排程抖動影響 |
-| **迭代 vs 遞迴的實作等價性** | `topologicalSortDFSIterative()`：用 `stack<pair<Gate*, int>>` 模擬遞迴 call stack，消除 `std::function` overhead；在深度鏈上比遞迴版快 ~4.5%（5000 閘，比 BFS 快 ~5.5%），實測「stack 與 recursion 等價」的理論在實作層的細微差距 |
-| **實驗設計與對照分析** | 三種 DAG 結構（random / deep_chain / wide_fanout）× 三種演算法的系統性對照；發現 deep_chain 上三者幾乎相同（±2%），random / wide_fanout 上 DFS 比 BFS 快約 8–15%，符合 BFS queue 操作常數因子較高的理論預期 |
+| **迭代 vs 遞迴的實作等價性** | `topologicalSortDFSIterative()` 用 `std::stack` 取代遞迴呼叫堆疊，在深度鏈上比遞迴版快 ~4.5%（5000 閘）；實證「stack 與 recursion 等價」的理論在實作層仍有可量化的差距 |
+| **實驗設計與對照分析** | 三種 DAG 結構 × 三種演算法的系統性對照；Random / Wide Fanout 下 DFS 比 BFS 快 8–15%、Deep Chain 下三者幾乎相同（±5%），符合 BFS queue 操作常數因子較高的理論預期 |
 
 總結來說，本專題不僅實作了課程教授的多種資料結構，更透過系統性的對照實驗，驗證了這些資料結構在實務情境下的選擇取捨。對我個人而言，這個專案讓資料結構從「課本上的演算法」變成「能解釋電腦為什麼跑這麼快」的具體工具——這比通過任何單元測試都更值得記住。
