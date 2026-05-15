@@ -159,8 +159,11 @@ DFS 拓撲排序的遞迴版與迭代版（顯式 stack）理論上等價，皆�
 
 **3. Critical Path 將抽象資料結構連到具體物理量**
 
-DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電路的最高工作頻率（MHz）。例如全加器的 critical path 為 7 ns，最高頻率即為 142 MHz。
+Top-K 最長路徑搜尋是本專案中資料結構協作最緊密的部分：先用拓撲排序確定計算順序，再用 DP 求每個節點的最長到達延遲，最後以 Max-Heap 反向取出延遲最大的 K 條完整路徑。
 
+這個演算法在電路領域稱為 critical path 分析、用於判斷時脈瓶頸，但其本質是純粹的資料結構問題——同樣的演算法也用於 build system 的關鍵任務調度、PERT 專案管理的關鍵路徑、編譯器的 instruction scheduling。
+
+DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電路的最高工作頻率（MHz）。例如全加器的 critical path 為 7 ns，最高頻率即為 142 MHz。
 現代 CPU 動輒上億個邏輯閘、跑 5 GHz，本質上就是這個演算法在百萬倍規模下的應用。資料結構不是抽象練習，是決定硬體效能的數學基礎。
 
 ### 最終實作的功能
@@ -170,22 +173,13 @@ DAG 最長路徑 DP + Max-Heap Top-K 的演算法輸出，可直接換算成電�
 | 6 種邏輯閘 | AND / OR / NOT / XOR / NAND / NOR，OOP 繼承 + 虛擬函式 |
 | 電路描述檔解析 | 自訂 `.txt` 格式，支援 INPUT / OUTPUT / GATE 關鍵字 |
 | BFS 拓撲排序 | Kahn's Algorithm，O(V+E)，deque + inDegree map |
-| DFS 拓撲排序（遞迴） | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK） |
-| **DFS 拓撲排序（迭代）** | `topologicalSortDFSIterative()`：顯式 stack + 三色標記，不用遞迴；支援環偵測；4 個 unit tests 驗證正確性 |
-| 迴圈偵測 | BFS 和 DFS 均支援，5 種不同拓撲的迴圈測試 |
+| DFS 拓撲排序（遞迴） | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK）、含環偵測 |
+| DFS 拓撲排序（迭代） | 顯式 `std::stack` + 三色標記，消除遞迴 overhead |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
-| **關鍵路徑分析（Critical Path）** | DAG DP 求最長延遲 + Max-Heap Top-K 反向路徑搜尋；各閘有實際傳播延遲（NOT=1、AND/OR/NAND/NOR=2、XOR=3 ns）；輸出路徑序列、總延遲、最高工作頻率 |
-| **JSON 匯出** | `--export-json <path>` 將電路的 nodes / edges / 拓撲序 / Critical Paths / 真值表匯出為 JSON，供前端視覺化使用；自行實作 JSON writer，無第三方依賴 |
-| `--trace` 模式 | 逐步印出 BFS / DFS 排序的每一步決策，以及 Critical Path DP 計算過程 |
-| `--critical-path K` | 指定回傳前 K 條最長路徑（預設 K=3） |
-| 效能比較 | BFS vs DFS 拓撲排序時間，含平均值和標準差 |
-| Ablation Study | 3 組資料結構對照實驗（Hash Map / 拓撲排序 / Map 選擇）|
-| 嚴謹 benchmark | 隨機 DAG，100 warm-up + 1000 測量，log-log 圖 |
-| 病態測試 | deep_chain / wide_fanout / dense_circuit + 5 個迴圈案例 |
-| **大規模效能測試（scale_bench）** | 7 個規模（10–5000 閘）× 隨機 DAG × 三種演算法（BFS / DFS 遞迴 / DFS 迭代），5 個 seed 取平均；輸出 CSV + 兩張圖 |
-| **結構性 DAG 對照實驗（structural_bench）** | 三種 DAG 結構（random / deep_chain / wide_fanout）× 7 個規模 × 三種演算法 × 5 seed；輸出 CSV + 三張圖 |
-| **React 網頁視覺化** | React + Vite + React Flow；支援電路選擇器、INPUT 節點 0/1 切換 + 訊號傳播、BFS/DFS 排序動畫步進、Critical Path 高亮 |
-
+| **Top-K 最長路徑分析** | DAG 最長路徑 DP（拓撲排序後 relax）+ Max-Heap 反向搜尋前 K 條路徑；輸出路徑序列與延遲總和；可用 `--critical-path K` 指定 K 值 |
+| `--trace` 模式 | 逐步印出 BFS / DFS 排序決策與 Critical Path DP 過程 |
+| **效能實驗** | 大規模測試（10–5000 閘）+ 結構性對照實驗（random / deep_chain / wide_fanout）× 三種演算法，輸出 log-log 圖、加速比圖、grouped bar chart |
+| **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、BFS/DFS 排序動畫、Critical Path 高亮；C++ 透過 `--export-json` 匯出資料給前端 |
 ---
 
 ### 使用方式
@@ -278,12 +272,9 @@ Critical Path 輸出範例（全加器，預設 K=3）：
 #### 執行 Benchmark
 
 ```bash
-make bench_random        # 嚴謹 BFS vs DFS（100 warm-up + 1000 測量）
-make benchmarks          # 執行 Ablation Study 三組實驗
-make plot                # 生成 random circuit log-log 圖
-make scale_bench         # 七個規模 × 三種演算法（BFS / DFS-rec / DFS-iter）隨機 DAG 效能測試
+make scale_bench         # 大規模效能測試：7 個規模 × 3 種演算法（BFS / DFS-rec / DFS-iter）
 make scale_plot          # 生成 scale_test_loglog.png / scale_test_speedup.png
-make structural_bench    # 三種 DAG 結構 × 七個規模 × 三種演算法對照實驗
+make structural_bench    # 結構性對照實驗：3 種 DAG 結構 × 7 規模 × 3 演算法
 make structural_plot     # 生成 structural_loglog.png / structural_speedup.png / structural_bar1000.png
 ```
 
@@ -296,26 +287,6 @@ make structural_plot     # 生成 structural_loglog.png / structural_speedup.png
 | `results/structural_loglog.png` | 三種結構 × 三種演算法 log-log 效能圖（9 條線）|
 | `results/structural_speedup.png` | DFS-rec/BFS、DFS-iter/BFS 加速比，三種結構各一子圖 |
 | `results/structural_bar1000.png` | 1000 閘 grouped bar：三種結構 × 三種演算法 |
-
-#### 執行病態測試
-
-```bash
-# 1000 NOT 串聯（deep chain）
-./simulator examples/stress_tests/deep_chain.txt
-
-# 1999 閘高扇出
-./simulator examples/stress_tests/wide_fanout.txt
-
-# 50 閘高密度（edge/gate ≈ 8.4）
-./simulator examples/stress_tests/dense_circuit.txt
-
-# 迴圈偵測（應輸出 ERROR）
-./simulator examples/stress_tests/cycle_detection_cases/simple_loop.txt
-./simulator examples/stress_tests/cycle_detection_cases/self_loop.txt
-./simulator examples/stress_tests/cycle_detection_cases/triple_ring.txt
-./simulator examples/stress_tests/cycle_detection_cases/compound_cycle.txt
-./simulator examples/stress_tests/cycle_detection_cases/nested_cycles.txt
-```
 
 #### 網頁視覺化
 
@@ -340,8 +311,9 @@ npm run dev     # 開啟 http://localhost:5173
 |----------|----------------|
 | **有向無環圖（DAG）** | 電路本身的資料結構：邏輯閘為節點，連線為有向邊 |
 | **拓撲排序（BFS/DFS）** | 決定閘的計算順序，兩種演算法的完整實作與比較 |
-| **雜湊表（Hash Map）** | `unordered_map` 儲存訊號值，O(1) 查詢；Ablation Study 實驗一 |
-| **平衡二元搜尋樹（BST）** | `map` vs `unordered_map` 的正確性與效能取捨；Ablation Study 實驗三 |
+| **雜湊表（Hash Map）** | `unordered_map` 儲存訊號值與元件名稱，O(1) 查詢 |
+| **平衡二元搜尋樹（BST）** | `std::map`（紅黑樹）管理訊號線名稱，維持有序以利真值表輸出 |
+實驗三 |
 | **堆積與優先權佇列（Heap）** | Critical Path Top-K 搜尋的核心：`std::priority_queue`（Max-Heap）按延遲上界排序，確保前 K 個彈出的完整路徑即為最長 K 條 |
 | **佇列（Queue）** | BFS 的核心資料結構，`deque` 實作 |
 | **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；迭代版用 `std::stack` 顯式管理 |
