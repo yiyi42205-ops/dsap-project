@@ -169,6 +169,8 @@ Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓�
 | `--trace` 模式 | 逐步印出 BFS / DFS 排序決策與 Critical Path DP 過程 |
 | **效能實驗** | 大規模測試（10–5000 閘）+ 結構性對照實驗（random / deep_chain / wide_fanout）× 三種演算法，輸出 log-log 圖、加速比圖、grouped bar chart |
 | **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、BFS/DFS 排序動畫、Critical Path 高亮；C++ 透過 `--export-json` 匯出資料給前端 |
+| **Quine-McCluskey 邏輯最小化** | 從 minterm 列表（或直接從 Circuit output 提取）產生最簡 SOP；支援 don't care；演算法：PI 生成 → Essential PI 選取 → 貪心覆蓋 |
+| **等價性檢查器（窮舉版）** | 輸入兩個電路，窮舉所有 2^n 輸入組合比對輸出；不等價時提供第一個反例（輸入向量 + 兩電路各自的輸出值）|
 
 ---
 
@@ -178,7 +180,7 @@ Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓�
 
 ```bash
 make          # 編譯主程式（生成 ./simulator）
-make test     # 執行所有 unit tests（19 個測試）
+make test     # 執行所有 unit tests（50 個測試）
 ```
 
 #### 互動式選單模式
@@ -254,6 +256,51 @@ make structural_plot     # 生成 structural_loglog.png / structural_speedup.png
 | `results/structural_loglog.png` | 三種結構 × 三種演算法 log-log 效能圖（9 條線）|
 | `results/structural_speedup.png` | DFS-rec/BFS、DFS-iter/BFS 加速比，三種結構各一子圖 |
 | `results/structural_bar1000.png` | 1000 閘 grouped bar：三種結構 × 三種演算法 |
+
+#### Quine-McCluskey 邏輯最小化
+
+```cpp
+// 從 minterm 列表最小化（標頭：src/qm_minimizer.h）
+QMResult r = minimize(3, {0,1,2,3,4,6}, {}, {"A","B","C"});
+printQMResult(r);          // 印出最簡 SOP
+// → "A' + C'"
+
+// 含 don't care
+QMResult r2 = minimize(3, {1,3,7}, {0,5}, {"A","B","C"});
+// → "C"
+
+// 從電路 output 自動提取
+Circuit fa = makeFullAdder();
+QMResult r3 = minimizeCircuitOutput(fa, "Cout");
+// → "AB + ACin + BCin"
+```
+
+```bash
+make test_qm   # 單獨跑 QM 最小化器的 18 個測試
+```
+
+#### 等價性檢查器
+
+```cpp
+// 標頭：src/equivalence_checker.h
+Circuit c1 = makeHalfAdder();
+Circuit c2 = makeHalfAdderNand();   // 全 NAND 實作
+EquivalenceResult r = checkEquivalence(c1, c2);
+printEquivalenceResult(r, c1, c2);
+// → 結果：✓ 等價
+
+Circuit c3 = makeBuggyHalfAdder();  // XOR 誤換成 OR
+EquivalenceResult r2 = checkEquivalence(c1, c3);
+printEquivalenceResult(r2, c1, c3);
+// → 結果：✗ 不等價
+// → 反例輸入：A=1, B=1
+// → c1 輸出：S=0, C=1
+// → c3 輸出：S=1, C=1
+```
+
+```bash
+make test_equiv   # 單獨跑等價性檢查器的 13 個測試
+```
 
 #### 網頁視覺化
 
