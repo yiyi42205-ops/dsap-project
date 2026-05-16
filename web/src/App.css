@@ -110,3 +110,41 @@ html, body, #root {
   position: relative;
   overflow: hidden;
 }
+
+/* ── 模式 Tab ────────────────────────────────────────────── */
+.mode-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mode-tab {
+  padding: 5px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mode-tab:hover {
+  background: #e0f2fe;
+  border-color: #38bdf8;
+  color: #0369a1;
+}
+
+.mode-tab--active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+  font-weight: 600;
+}
+
+.mode-tab--active:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}

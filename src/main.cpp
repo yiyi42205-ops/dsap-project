@@ -1,6 +1,8 @@
 #include "circuit.h"
 #include "critical_path.h"
 #include "json_export.h"
+#include "sop_to_circuit.h"
+#include "qm_minimizer.h"
 
 // ============================================================
 // 4. 內建範例電路
@@ -78,24 +80,13 @@ Circuit create4BitAdder() {
 // ============================================================
 int main(int argc, char* argv[]) {
     // ── 解析命令列引數 ───────────────────────────────────────
-    bool traceMode  = false;
-    int  maxSteps   = -1;  // -1 = 無限制
     int  topK       = 3;   // Critical Path Top-K，預設 3
     std::string fileArg    = "";
     std::string exportJson = ""; // --export-json <path>，空字串表示不匯出
+    std::string qmArg      = ""; // --qm <file.tt>
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "--trace") {
-            traceMode = true;
-        } else if (arg == "--max-steps" && i + 1 < argc) {
-            try {
-                maxSteps = std::stoi(argv[++i]);
-                if (maxSteps < 0) { std::cerr << "錯誤：--max-steps 必須為非負整數\n"; return 1; }
-            } catch (...) {
-                std::cerr << "錯誤：--max-steps 的引數不是有效整數：" << argv[i] << "\n";
-                return 1;
-            }
-        } else if (arg == "--critical-path" && i + 1 < argc) {
+        if (arg == "--critical-path" && i + 1 < argc) {
             try {
                 topK = std::stoi(argv[++i]);
                 if (topK <= 0) { std::cerr << "錯誤：--critical-path K 必須為正整數\n"; return 1; }
@@ -105,9 +96,37 @@ int main(int argc, char* argv[]) {
             }
         } else if (arg == "--export-json" && i + 1 < argc) {
             exportJson = argv[++i];
+        } else if (arg == "--qm" && i + 1 < argc) {
+            qmArg = argv[++i];
         } else {
             fileArg = arg;
         }
+    }
+
+    // ── --qm 模式：解析 .tt、跑 QM、印結果或匯出 JSON ───────
+    if (!qmArg.empty()) {
+        int numVars = 0;
+        std::vector<int> minterms, dontCares;
+        std::vector<std::string> varNames;
+        if (!parseTruthTableFile(qmArg, numVars, minterms, dontCares, varNames))
+            return 1;
+
+        QMResult qmResult = minimize(numVars, minterms, dontCares, varNames);
+        if (qmResult.numVars == 0) return 1;
+
+        // 恆 0 / 恆 1 提示
+        bool isConst0 = qmResult.terms.empty();
+        bool isConst1 = (qmResult.terms.size() == 1 && qmResult.terms[0].care == 0);
+        if (isConst0) std::cout << "函數恆 0，無需電路\n";
+        if (isConst1) std::cout << "函數恆 1，無需電路\n";
+
+        printQMResult(qmResult);
+
+        if (!exportJson.empty()) {
+            if (!exportQMToJson(qmArg, exportJson, topK)) return 1;
+            std::cout << "Exported to " << exportJson << "\n";
+        }
+        return 0;
     }
 
     // ── --export-json 模式：靜默匯出，不印其他輸出 ──────────
@@ -135,44 +154,15 @@ int main(int argc, char* argv[]) {
         Circuit circuit;
         if (!circuit.loadFromFile(fileArg)) return 1;
 
-        if (traceMode) {
-            // ── 追蹤模式：逐步印出排序過程 ───────────────────
-            std::cout << "\n";
-            std::cout << "╔══════════════════════════════════════════════════════╗\n";
-            std::cout << "║  --trace 模式：BFS (Kahn's Algorithm) 追蹤          ║\n";
-            std::cout << "╚══════════════════════════════════════════════════════╝\n\n";
-            if (!circuit.topologicalSortBFS(true, maxSteps)) return 1;
-
-            std::cout << "\n";
-            std::cout << "╔══════════════════════════════════════════════════════╗\n";
-            std::cout << "║  --trace 模式：DFS (反向後序遍歷) 追蹤              ║\n";
-            std::cout << "╚══════════════════════════════════════════════════════╝\n\n";
-            if (!circuit.topologicalSortDFS(true, maxSteps)) return 1;
-
-            std::cout << "\n";
-            std::cout << "╔══════════════════════════════════════════════════════╗\n";
-            std::cout << "║  --trace 模式：Critical Path DP 追蹤                ║\n";
-            std::cout << "╚══════════════════════════════════════════════════════╝\n";
-            auto paths = computeTopKCriticalPaths(
-                circuit.getAllGates(), circuit.getInputs(),
-                circuit.getOutputs(), topK, /*trace=*/true);
-            printCriticalPaths(paths);
-
-            std::cout << "\n（追蹤模式下跳過真值表與效能比較，避免輸出過多）\n";
-            if (maxSteps >= 0)
-                std::cout << "已套用 --max-steps " << maxSteps << "：超過此步數後排序繼續但不再印出。\n";
-            std::cout << "若需完整輸出，請不加 --trace 旗標執行。\n";
-        } else {
-            if (!circuit.topologicalSort()) return 1;
-            circuit.printInfo();
-            std::cout << "=== 真值表 ===\n";
-            circuit.generateTruthTable();
-            auto paths = computeTopKCriticalPaths(
-                circuit.getAllGates(), circuit.getInputs(),
-                circuit.getOutputs(), topK);
-            printCriticalPaths(paths);
-            circuit.performanceComparison();
-        }
+        if (!circuit.topologicalSort()) return 1;
+        circuit.printInfo();
+        std::cout << "=== 真值表 ===\n";
+        circuit.generateTruthTable();
+        auto paths = computeTopKCriticalPaths(
+            circuit.getAllGates(), circuit.getInputs(),
+            circuit.getOutputs(), topK);
+        printCriticalPaths(paths);
+        circuit.performanceComparison();
         return 0;
     }
 

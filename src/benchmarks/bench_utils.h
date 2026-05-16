@@ -13,7 +13,7 @@
 //   avg_fanin  : 平均扇入數（實際 fan-in 在 [2, avg_fanin+2] 間）
 //   seed       : 亂數種子（固定 seed 可重現）
 
-#include "circuit.h"
+#include "../circuit.h"
 #include <random>
 #include <numeric>
 #include <cmath>

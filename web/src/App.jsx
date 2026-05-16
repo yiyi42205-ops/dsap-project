@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import CircuitViewer from './CircuitViewer.jsx';
 import ControlPanel from './ControlPanel.jsx';
+import QMViewer from './QMViewer.jsx';
 import { propagateSignals } from './gateLogic.js';
 import './App.css';
 
@@ -12,6 +13,7 @@ const CIRCUITS = [
 ];
 
 export default function App() {
+  const [mode, setMode] = useState('circuit'); // 'circuit' | 'qm'
   const [circuitIdx, setCircuitIdx] = useState(0);
   const [circuitData, setCircuitData] = useState(null);
   const [inputValues, setInputValues] = useState({});
@@ -107,19 +109,38 @@ export default function App() {
           <span className="app-title">數位邏輯電路模擬器</span>
           <span className="app-subtitle">將電路視為 DAG，以拓撲排序決定邏輯閘的計算順序</span>
         </div>
-        <div className="app-controls">
-          <select
-            className="circuit-select"
-            value={circuitIdx}
-            onChange={e => setCircuitIdx(Number(e.target.value))}
+
+        {/* 模式 Tab */}
+        <div className="mode-tabs">
+          <button
+            className={`mode-tab${mode === 'circuit' ? ' mode-tab--active' : ''}`}
+            onClick={() => setMode('circuit')}
           >
-            {CIRCUITS.map((c, i) => (
-              <option key={i} value={i}>{c.label}</option>
-            ))}
-          </select>
-          <span className="circuit-desc">{CIRCUITS[circuitIdx].desc}</span>
+            電路模擬
+          </button>
+          <button
+            className={`mode-tab${mode === 'qm' ? ' mode-tab--active' : ''}`}
+            onClick={() => setMode('qm')}
+          >
+            真值表化簡
+          </button>
         </div>
-        {circuitData && (
+
+        {mode === 'circuit' && (
+          <div className="app-controls">
+            <select
+              className="circuit-select"
+              value={circuitIdx}
+              onChange={e => setCircuitIdx(Number(e.target.value))}
+            >
+              {CIRCUITS.map((c, i) => (
+                <option key={i} value={i}>{c.label}</option>
+              ))}
+            </select>
+            <span className="circuit-desc">{CIRCUITS[circuitIdx].desc}</span>
+          </div>
+        )}
+        {mode === 'circuit' && circuitData && (
           <span className="circuit-info">
             {circuitData.nodes.filter(n => n.type === 'INPUT').length} inputs ·{' '}
             {circuitData.nodes.filter(n => !['INPUT', 'OUTPUT'].includes(n.type)).length} gates ·{' '}
@@ -130,29 +151,35 @@ export default function App() {
 
       {/* 主體 */}
       <div className="app-body">
-        <div className="viewer-area">
-          {/* 互動提示框 */}
-          <div className="hint-box">
-            💡 點擊左側 <strong>INPUT</strong> 節點切換 0/1，觀察訊號傳播。紅色邊代表訊號為 1。
-          </div>
-          <div className="viewer-canvas">
-            <CircuitViewer
+        {mode === 'qm' ? (
+          <QMViewer />
+        ) : (
+          <>
+            <div className="viewer-area">
+              {/* 互動提示框 */}
+              <div className="hint-box">
+                💡 點擊左側 <strong>INPUT</strong> 節點切換 0/1，觀察訊號傳播。紅色邊代表訊號為 1。
+              </div>
+              <div className="viewer-canvas">
+                <CircuitViewer
+                  circuitData={circuitData}
+                  signalMap={signalMap}
+                  highlightedNodeId={highlightedNodeId}
+                  criticalEdgeSet={criticalEdgeSet}
+                  onInputToggle={handleInputToggle}
+                />
+              </div>
+            </div>
+            <ControlPanel
               circuitData={circuitData}
-              signalMap={signalMap}
-              highlightedNodeId={highlightedNodeId}
-              criticalEdgeSet={criticalEdgeSet}
-              onInputToggle={handleInputToggle}
+              onPlayBFS={handlePlayBFS}
+              onPlayDFS={handlePlayDFS}
+              isAnimating={isAnimating}
+              onSelectCriticalPath={handleSelectCriticalPath}
+              selectedCriticalPathIdx={selectedCriticalPathIdx}
             />
-          </div>
-        </div>
-        <ControlPanel
-          circuitData={circuitData}
-          onPlayBFS={handlePlayBFS}
-          onPlayDFS={handlePlayDFS}
-          isAnimating={isAnimating}
-          onSelectCriticalPath={handleSelectCriticalPath}
-          selectedCriticalPathIdx={selectedCriticalPathIdx}
-        />
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,150 @@
+{
+  "source_file": "/tmp/four_var.tt",
+  "qm_result": {
+    "num_vars": 4,
+    "var_names": ["A", "B", "C", "D"],
+    "sop": "A'D'",
+    "term_count": 1,
+    "terms": [
+      {"literals": ["A'", "D'"]}
+    ]
+  },
+  "direct_circuit": {
+    "nodes": [
+      {"id": "IN_A", "type": "INPUT", "delay": 0},
+      {"id": "IN_B", "type": "INPUT", "delay": 0},
+      {"id": "IN_C", "type": "INPUT", "delay": 0},
+      {"id": "IN_D", "type": "INPUT", "delay": 0},
+      {"id": "NOT_A", "type": "NOT", "delay": 1},
+      {"id": "NOT_B", "type": "NOT", "delay": 1},
+      {"id": "NOT_C", "type": "NOT", "delay": 1},
+      {"id": "NOT_D", "type": "NOT", "delay": 1},
+      {"id": "AND_m0", "type": "AND", "delay": 2},
+      {"id": "AND_m2", "type": "AND", "delay": 2},
+      {"id": "AND_m4", "type": "AND", "delay": 2},
+      {"id": "AND_m6", "type": "AND", "delay": 2},
+      {"id": "OR_out", "type": "OR", "delay": 2},
+      {"id": "OUT_F", "type": "OUTPUT", "delay": 0}
+    ],
+    "edges": [
+      {"from": "IN_A", "to": "NOT_A"},
+      {"from": "IN_B", "to": "NOT_B"},
+      {"from": "IN_C", "to": "NOT_C"},
+      {"from": "IN_D", "to": "NOT_D"},
+      {"from": "NOT_A", "to": "AND_m0"},
+      {"from": "NOT_B", "to": "AND_m0"},
+      {"from": "NOT_C", "to": "AND_m0"},
+      {"from": "NOT_D", "to": "AND_m0"},
+      {"from": "NOT_A", "to": "AND_m2"},
+      {"from": "NOT_B", "to": "AND_m2"},
+      {"from": "IN_C", "to": "AND_m2"},
+      {"from": "NOT_D", "to": "AND_m2"},
+      {"from": "NOT_A", "to": "AND_m4"},
+      {"from": "IN_B", "to": "AND_m4"},
+      {"from": "NOT_C", "to": "AND_m4"},
+      {"from": "NOT_D", "to": "AND_m4"},
+      {"from": "NOT_A", "to": "AND_m6"},
+      {"from": "IN_B", "to": "AND_m6"},
+      {"from": "IN_C", "to": "AND_m6"},
+      {"from": "NOT_D", "to": "AND_m6"},
+      {"from": "AND_m0", "to": "OR_out"},
+      {"from": "AND_m2", "to": "OR_out"},
+      {"from": "AND_m4", "to": "OR_out"},
+      {"from": "AND_m6", "to": "OR_out"},
+      {"from": "OR_out", "to": "OUT_F"}
+    ],
+    "topo_order_bfs": ["IN_A", "IN_B", "IN_C", "IN_D", "NOT_A", "NOT_B", "NOT_C", "NOT_D", "AND_m0", "AND_m2", "AND_m4", "AND_m6", "OR_out"],
+    "topo_order_dfs": ["IN_A", "IN_B", "IN_C", "IN_D", "NOT_D", "NOT_C", "NOT_B", "NOT_A", "AND_m6", "AND_m4", "AND_m2", "AND_m0", "OR_out"],
+    "critical_paths": [
+      {
+        "rank": 1,
+        "delay": 5,
+        "max_freq_mhz": 200,
+        "path": ["IN_A", "NOT_A", "AND_m0", "OR_out", "OUT_F"]
+      },
+      {
+        "rank": 2,
+        "delay": 5,
+        "max_freq_mhz": 200,
+        "path": ["IN_D", "NOT_D", "AND_m0", "OR_out", "OUT_F"]
+      },
+      {
+        "rank": 3,
+        "delay": 5,
+        "max_freq_mhz": 200,
+        "path": ["IN_A", "NOT_A", "AND_m2", "OR_out", "OUT_F"]
+      }
+    ],
+    "truth_table": [
+      {"inputs": {"A": 0, "B": 0, "C": 0, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 0, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 0, "B": 0, "C": 1, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 0, "C": 1, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 0, "B": 1, "C": 0, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 1, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 0, "B": 1, "C": 1, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 1, "C": 1, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 0, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 1, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 1, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 0, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 1, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 1, "D": 1}, "outputs": {"F": 0}}
+    ]
+  },
+  "minimized_circuit": {
+    "nodes": [
+      {"id": "IN_A", "type": "INPUT", "delay": 0},
+      {"id": "IN_B", "type": "INPUT", "delay": 0},
+      {"id": "IN_C", "type": "INPUT", "delay": 0},
+      {"id": "IN_D", "type": "INPUT", "delay": 0},
+      {"id": "NOT_A", "type": "NOT", "delay": 1},
+      {"id": "NOT_D", "type": "NOT", "delay": 1},
+      {"id": "AND_t0", "type": "AND", "delay": 2},
+      {"id": "OUT_F", "type": "OUTPUT", "delay": 0}
+    ],
+    "edges": [
+      {"from": "IN_A", "to": "NOT_A"},
+      {"from": "IN_D", "to": "NOT_D"},
+      {"from": "NOT_A", "to": "AND_t0"},
+      {"from": "NOT_D", "to": "AND_t0"},
+      {"from": "AND_t0", "to": "OUT_F"}
+    ],
+    "topo_order_bfs": ["IN_A", "IN_B", "IN_C", "IN_D", "NOT_A", "NOT_D", "AND_t0"],
+    "topo_order_dfs": ["IN_A", "IN_B", "IN_C", "IN_D", "NOT_D", "NOT_A", "AND_t0"],
+    "critical_paths": [
+      {
+        "rank": 1,
+        "delay": 3,
+        "max_freq_mhz": 333,
+        "path": ["IN_A", "NOT_A", "AND_t0", "OUT_F"]
+      },
+      {
+        "rank": 2,
+        "delay": 3,
+        "max_freq_mhz": 333,
+        "path": ["IN_D", "NOT_D", "AND_t0", "OUT_F"]
+      }
+    ],
+    "truth_table": [
+      {"inputs": {"A": 0, "B": 0, "C": 0, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 0, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 0, "B": 0, "C": 1, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 0, "C": 1, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 0, "B": 1, "C": 0, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 1, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 0, "B": 1, "C": 1, "D": 0}, "outputs": {"F": 1}},
+      {"inputs": {"A": 0, "B": 1, "C": 1, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 0, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 1, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 0, "C": 1, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 0, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 0, "D": 1}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 1, "D": 0}, "outputs": {"F": 0}},
+      {"inputs": {"A": 1, "B": 1, "C": 1, "D": 1}, "outputs": {"F": 0}}
+    ]
+  }
+}

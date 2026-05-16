@@ -20,3 +20,13 @@ bool exportCircuitToJson(Circuit& circuit,
                          const std::string& circuitName,
                          const std::string& outputPath,
                          int topK = 3);
+
+// 從 .tt 真值表描述檔解析、執行 QM 最小化，並將以下內容匯出為 JSON：
+//   - QM 結果摘要（SOP 字串、乘積項數）
+//   - 直接版電路（每個 minterm 一個 AND 閘）
+//   - QM 化簡版電路（每個乘積項一個 AND 閘）
+// 恆 0 / 恆 1 時對應電路欄位輸出 null
+// 回傳 true 表示成功
+bool exportQMToJson(const std::string& ttPath,
+                    const std::string& outputPath,
+                    int topK = 3);

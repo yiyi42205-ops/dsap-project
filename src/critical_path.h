@@ -46,13 +46,11 @@ struct CPHeapEntry {
 // inputSignals  : circuit.getInputs()
 // outputSignals : circuit.getOutputs()
 // K             : 要找幾條最長路徑
-// trace         : 是否逐步印出 DP 計算過程
 inline std::vector<CriticalPath> computeTopKCriticalPaths(
     const std::vector<Gate*>&        allGates,
     const std::vector<std::string>&  inputSignals,
     const std::vector<std::string>&  outputSignals,
-    int  K,
-    bool trace = false)
+    int  K)
 {
     if (K <= 0 || allGates.empty()) return {};
 
@@ -91,10 +89,6 @@ inline std::vector<CriticalPath> computeTopKCriticalPaths(
 
     // ── Step 2：正向 DP ────────────────────────────────────
     // dist[g] = g->delay + max(dist[pred] for all pred gates)
-    if (trace) {
-        std::cout << "\n[CP Trace] DP 計算各閘最長到達延遲（拓撲順序）：\n";
-        std::cout << "  格式：閘名 (類型, delay=X)  incoming_max=Y  dist=Z\n";
-    }
     std::unordered_map<Gate*, int> dist;
     for (Gate* g : topoOrder) {
         int maxPred = 0;
@@ -104,12 +98,6 @@ inline std::vector<CriticalPath> computeTopKCriticalPaths(
                 maxPred = std::max(maxPred, dist.at(it->second));
         }
         dist[g] = g->delay + maxPred;
-        if (trace) {
-            std::cout << "  " << g->name
-                      << " (" << g->type << ", delay=" << g->delay << ")"
-                      << "  incoming_max=" << maxPred
-                      << "  dist=" << dist[g] << "\n";
-        }
     }
 
     // ── 建立反向邊（predecessor gates）────────────────────
@@ -125,10 +113,6 @@ inline std::vector<CriticalPath> computeTopKCriticalPaths(
     }
 
     // ── Step 3：Max-Heap 反向搜尋 Top-K 路徑 ─────────────
-    if (trace) {
-        std::cout << "\n[CP Trace] Max-Heap 反向搜尋 Top-" << K << " 路徑：\n";
-    }
-
     std::priority_queue<CPHeapEntry> heap;
 
     // 初始化：每個 output signal 的產生閘各推一個 entry
@@ -151,15 +135,6 @@ inline std::vector<CriticalPath> computeTopKCriticalPaths(
             cp.nodes = cur.nodes;
             std::reverse(cp.nodes.begin(), cp.nodes.end());
             results.push_back(cp);
-            if (trace) {
-                std::cout << "  [完整] 找到第 " << results.size() << " 條路徑："
-                          << " delay=" << cp.totalDelay << "  ";
-                for (int i = 0; i < (int)cp.nodes.size(); i++) {
-                    if (i > 0) std::cout << " → ";
-                    std::cout << cp.nodes[i];
-                }
-                std::cout << "\n";
-            }
             continue;
         }
 

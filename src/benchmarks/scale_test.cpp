@@ -8,7 +8,7 @@
 // 編譯：g++ -std=c++17 -O2 -Wall scale_test.cpp -o scale_test
 // 執行：./scale_test（需先建立 results/ 目錄）
 
-#include "../random_dag.h"
+#include "bench_utils.h"
 #include <fstream>
 #include <iomanip>
 #include <cmath>
@@ -123,6 +123,6 @@ int main() {
 
     csv.close();
     std::cout << "\nCSV 已寫入：results/scale_test.csv\n";
-    std::cout << "執行 'python3 plot_scale.py' 可生成圖表。\n\n";
+    std::cout << "執行 'python3 plot_bench.py' 可生成圖表。\n\n";
     return 0;
 }

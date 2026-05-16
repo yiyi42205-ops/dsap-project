@@ -135,7 +135,7 @@ Prototype 階段預計完成以下可驗證的功能：
 
 本專題實作了一個 C++ 命令列數位邏輯電路工具，搭配 React 視覺化前端，以「用電路學資料結構」為核心定位：電路本身是一個 有向無環圖（DAG），模擬器透過拓撲排序決定邏輯閘的計算順序，Heap 找出延遲最長的關鍵路徑，讓使用者能清楚看到演算法如何驅動硬體模擬。
 
-在模擬之外，本專題進一步以 Quine-McCluskey 演算法（Set Cover 的應用）從真值表逆向產生最簡電路，再以等價性檢查器驗證化簡結果。工具因此涵蓋「模擬 → 化簡 → 驗證」完整流程，從單純的模擬器延伸為小型的電路設計與驗證工具鏈。
+在模擬之外，本專題進一步以 Quine-McCluskey 演算法（Set Cover 的應用）從真值表逆向產生最簡電路。工具因此涵蓋「模擬 → 化簡」完整流程，從單純的模擬器延伸為小型的電路設計工具鏈。
 
 ### 主要研究發現
 
@@ -168,11 +168,9 @@ Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓�
 | DFS 拓撲排序（迭代） | 顯式 `std::stack` + 三色標記，消除遞迴 overhead |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
 | **Top-K 最長路徑分析** | DAG 最長路徑 DP（拓撲排序後 relax）+ Max-Heap 反向搜尋前 K 條路徑；輸出路徑序列與延遲總和；可用 `--critical-path K` 指定 K 值 |
-| `--trace` 模式 | 逐步印出 BFS / DFS 排序決策與 Critical Path DP 過程 |
 | **效能實驗** | 大規模測試（10–5000 閘）+ 結構性對照實驗（random / deep_chain / wide_fanout）× 三種演算法，輸出 log-log 圖、加速比圖、grouped bar chart |
 | **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、BFS/DFS 排序動畫、Critical Path 高亮；C++ 透過 `--export-json` 匯出資料給前端 |
 | **Quine-McCluskey 邏輯最小化** | 從 minterm 列表（或直接從 Circuit output 提取）產生最簡 SOP；支援 don't care；演算法：PI 生成 → Essential PI 選取 → 貪心覆蓋 |
-| **等價性檢查器（窮舉版）** | 輸入兩個電路，窮舉所有 2^n 輸入組合比對輸出；不等價時提供第一個反例（輸入向量 + 兩電路各自的輸出值）|
 
 ---
 
@@ -182,7 +180,7 @@ Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓�
 
 ```bash
 make          # 編譯主程式（生成 ./simulator）
-make test     # 執行所有 unit tests（50 個測試）
+make test     # 執行所有 unit tests（53 個測試）
 ```
 
 #### 互動式選單模式
@@ -224,14 +222,6 @@ Critical Path 輸出範例（全加器，預設 K=3）：
    路徑: A → XOR_1 → XOR_2 → S
 ```
 
-#### `--trace` 模式（逐步追蹤）
-
-```bash
-./simulator --trace src/circuits/full_adder.txt
-```
-
-逐步印出 BFS 排序、DFS 排序，以及 Critical Path DP 計算每個節點延遲的過程。`--trace` 模式下跳過真值表和效能比較，建議用於小型電路（< 20 閘）。
-
 #### JSON 匯出
 
 ```bash
@@ -243,10 +233,9 @@ Critical Path 輸出範例（全加器，預設 K=3）：
 #### 執行 Benchmark
 
 ```bash
-make scale_bench         # 大規模效能測試：7 個規模 × 3 種演算法（BFS / DFS-rec / DFS-iter）
-make scale_plot          # 生成 scale_test_loglog.png / scale_test_speedup.png
-make structural_bench    # 結構性對照實驗：3 種 DAG 結構 × 7 規模 × 3 演算法
-make structural_plot     # 生成 structural_loglog.png / structural_speedup.png / structural_bar1000.png
+make scale_bench      # 大規模效能測試：7 個規模 × 3 種演算法（BFS / DFS-rec / DFS-iter）
+make structural_bench # 結構性對照實驗：3 種 DAG 結構 × 7 規模 × 3 演算法
+make bench_plot       # 生成所有圖表（需先跑上面兩支）
 ```
 
 圖表輸出說明：
@@ -279,29 +268,6 @@ QMResult r3 = minimizeCircuitOutput(fa, "Cout");
 
 ```bash
 make test_qm   # 單獨跑 QM 最小化器的 18 個測試
-```
-
-#### 等價性檢查器
-
-```cpp
-// 標頭：src/equivalence_checker.h
-Circuit c1 = makeHalfAdder();
-Circuit c2 = makeHalfAdderNand();   // 全 NAND 實作
-EquivalenceResult r = checkEquivalence(c1, c2);
-printEquivalenceResult(r, c1, c2);
-// → 結果：✓ 等價
-
-Circuit c3 = makeBuggyHalfAdder();  // XOR 誤換成 OR
-EquivalenceResult r2 = checkEquivalence(c1, c3);
-printEquivalenceResult(r2, c1, c3);
-// → 結果：✗ 不等價
-// → 反例輸入：A=1, B=1
-// → c1 輸出：S=0, C=1
-// → c3 輸出：S=1, C=1
-```
-
-```bash
-make test_equiv   # 單獨跑等價性檢查器的 13 個測試
 ```
 
 #### 網頁視覺化

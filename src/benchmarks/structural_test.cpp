@@ -10,7 +10,7 @@
 // 編譯：g++ -std=c++17 -O2 -Wall structural_test.cpp -o structural_test
 // 執行：./structural_test（需先建立 results/ 目錄）
 
-#include "../random_dag.h"
+#include "bench_utils.h"
 #include <fstream>
 #include <iomanip>
 #include <cmath>
@@ -159,6 +159,6 @@ int main() {
 
     csv.close();
     std::cout << "CSV 已寫入：results/structural_test.csv\n";
-    std::cout << "執行 'python3 plot_structural.py' 可生成圖表。\n\n";
+    std::cout << "執行 'python3 plot_bench.py' 可生成圖表。\n\n";
     return 0;
 }
