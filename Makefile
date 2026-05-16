@@ -8,7 +8,7 @@ TESTS    = tests
 # ── 預設目標 ─────────────────────────────────────────────────────
 .PHONY: all main benchmarks bench_hash bench_topo bench_ordered bench_random \
         plot scale_bench scale_plot structural_bench structural_plot test clean \
-        test_dfs_iter
+        test_dfs_iter test_qm test_equiv
 
 all: main
 
@@ -74,10 +74,19 @@ $(TESTS)/test_topo_consistency: $(TESTS)/test_topo_consistency.cpp src/circuit.h
 $(TESTS)/test_dfs_iterative: $(TESTS)/test_dfs_iterative.cpp src/circuit.h
 	$(CXX) $(CXXFLAGS) $< -o $@
 
+$(TESTS)/test_qm_minimizer: $(TESTS)/test_qm_minimizer.cpp src/qm_minimizer.h src/circuit.h
+	$(CXX) $(CXXFLAGS) $< -o $@
+
+$(TESTS)/test_equivalence_checker: $(TESTS)/test_equivalence_checker.cpp \
+                                    src/equivalence_checker.h src/circuit.h
+	$(CXX) $(CXXFLAGS) $< -o $@
+
 test: $(TESTS)/test_truth_table \
       $(TESTS)/test_edge_cases \
       $(TESTS)/test_topo_consistency \
-      $(TESTS)/test_dfs_iterative
+      $(TESTS)/test_dfs_iterative \
+      $(TESTS)/test_qm_minimizer \
+      $(TESTS)/test_equivalence_checker
 	@echo ""
 	@echo "╔══════════════════════════════════╗"
 	@echo "║        Running Unit Tests        ║"
@@ -90,7 +99,19 @@ test: $(TESTS)/test_truth_table \
 	@echo ""
 	@$(TESTS)/test_dfs_iterative    || (echo ""; echo "test_dfs_iterative FAILED"; exit 1)
 	@echo ""
+	@$(TESTS)/test_qm_minimizer     || (echo ""; echo "test_qm_minimizer FAILED"; exit 1)
+	@echo ""
+	@$(TESTS)/test_equivalence_checker || (echo ""; echo "test_equivalence_checker FAILED"; exit 1)
+	@echo ""
 	@echo "All tests passed."
+
+# ── Quine-McCluskey 最小化器（單獨跑）───────────────────────
+test_qm: $(TESTS)/test_qm_minimizer
+	@$(TESTS)/test_qm_minimizer
+
+# ── 等價性檢查器（單獨跑）───────────────────────────────────
+test_equiv: $(TESTS)/test_equivalence_checker
+	@$(TESTS)/test_equivalence_checker
 
 # ── 清理 ─────────────────────────────────────────────────────────
 clean:
@@ -104,5 +125,7 @@ clean:
 	      $(TESTS)/test_truth_table \
 	      $(TESTS)/test_edge_cases \
 	      $(TESTS)/test_topo_consistency \
-	      $(TESTS)/test_dfs_iterative
+	      $(TESTS)/test_dfs_iterative \
+	      $(TESTS)/test_qm_minimizer \
+	      $(TESTS)/test_equivalence_checker
 	rm -rf $(RESULTS)
