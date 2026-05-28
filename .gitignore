@@ -1,54 +1,7 @@
-# Compiled binaries
-*.o
-*.obj
-*.exe
-*.out
-*.a
-*.so
-*.dll
-*.dylib
-
-# Project-specific compiled outputs
+a.out
 simulator
-src/benchmarks/hash_vs_linear
-src/benchmarks/topo_vs_naive
-src/benchmarks/ordered_vs_unordered
-tests/test_truth_table
-tests/test_edge_cases
-tests/test_topo_consistency
-
-# Benchmark results (generated data, not source)
-src/benchmarks/results/
-
-# Build directories
-build/
-cmake-build-*/
-bin/
-obj/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Claude
-.claude/
-
-# Internal docs
-docs/superpowers/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.env
-venv/
-
-# Node.js
-node_modules/
+output/
+web/node_modules/
+*.o
+tests/test_*
+!tests/test_*.cpp

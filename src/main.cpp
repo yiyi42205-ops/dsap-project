@@ -172,26 +172,10 @@ int main(int argc, char* argv[]) {
     std::cout << "  3. 2-to-1 多工器 (MUX)         - 4 閘\n";
     std::cout << "  4. 4-bit 加法器 (4-bit Adder)  - 20 閘\n";
     std::cout << "  5. 從檔案載入\n";
-    std::cout << "  6. 效能比較模式（比較所有內建電路）\n";
-    std::cout << "\n請輸入選項 (1-6): ";
+    std::cout << "\n請輸入選項 (1-5): ";
 
     int choice;
     std::cin >> choice;
-
-    if (choice == 6) {
-        std::cout << "\n========== 效能比較模式 ==========\n\n";
-        auto runBench = [](const std::string& label, Circuit c) {
-            std::cout << "--- " << label << " ---\n";
-            c.topologicalSort();
-            c.performanceComparison();
-            std::cout << "\n";
-        };
-        runBench("半加器 (2 閘)",       createHalfAdder());
-        runBench("全加器 (5 閘)",       createFullAdder());
-        runBench("2-to-1 MUX (4 閘)",  createMux2to1());
-        runBench("4-bit 加法器 (20 閘)", create4BitAdder());
-        return 0;
-    }
 
     Circuit circuit;
     switch (choice) {

@@ -67,11 +67,12 @@ Prototype 階段預計完成以下可驗證的功能：
 
 ---
 
+
 ## Prototype Report
 
 ### 目前進度
 
-目前已完成 Proposal 中列出的全部 4 項可驗證功能，以及新增的效能比較功能：
+目前已完成 Proposal 中列出的全部 4 項可驗證功能：
 
 **✅ 已完成的功能：**
 
@@ -82,10 +83,7 @@ Prototype 階段預計完成以下可驗證的功能：
    支援自定義的 `.txt` 格式，可定義 INPUT、OUTPUT、GATE 及連線關係（`->`）。已通過半加器、全加器、MUX 三個測試檔的驗證。
 
 3. **DAG 建構 + 拓撲排序**
-   實作了兩種拓撲排序演算法：
-   - **BFS 版（Kahn's Algorithm）**：使用 Queue + Hash Map，逐步移除入度為 0 的節點。
-   - **DFS 版（反向後序遍歷）**：使用 Stack（遞迴呼叫堆疊）+ Hash Map，深度優先搜尋後反轉結果。
-   兩者皆能正確偵測電路中的迴圈。
+   將電路建構為有向無環圖，並以拓撲排序決定邏輯閘的計算順序，確保每個閘在計算時其所有輸入皆已就緒。實作採用 Kahn's Algorithm（BFS，Queue + 入度表），並能正確偵測電路中的迴圈。
 
 4. **真值表自動產生**
    窮舉所有 2^n 種輸入組合，逐一模擬並印出完整真值表。已驗證半加器（4 組）、全加器（8 組）、4-bit 加法器（512 組）的輸出結果皆正確。
@@ -93,39 +91,18 @@ Prototype 階段預計完成以下可驗證的功能：
 5. **4 個內建範例電路**
    半加器（2 閘）、全加器（5 閘）、2-to-1 MUX（4 閘）、4-bit 加法器（20 閘）。
 
-6. **⭐ BFS vs DFS 拓撲排序效能比較（對應期末 Demo 要求）**
-   針對同一電路，分別以 BFS 和 DFS 兩種方式執行拓撲排序，測量並比較：
-   - 純排序時間（10,000 次迭代）
-   - 完整模擬時間（排序 + 訊號傳播，1,000 輪）
-   - 結果一致性驗證
-
-   初步實測結果摘要：
-
-   | 電路 | 閘數 | BFS 平均排序 | DFS 平均排序 | 勝者 |
-   |------|------|-------------|-------------|------|
-   | 半加器 | 2 | 0.37 μs | 0.35 μs | 接近 |
-   | 全加器 | 5 | 0.98 μs | 0.91 μs | DFS |
-   | MUX | 4 | 0.72 μs | 0.72 μs | 接近 |
-   | 4-bit 加法器 | 20 | 9.82 μs | 6.61 μs | DFS（快 1.5x） |
-
-   觀察：在小規模電路中兩者差異不大；隨著閘數增加，DFS 版本因為較少的記憶體配置開銷而領先。兩種演算法產出的拓撲排序順序不同，但模擬結果完全一致，驗證了「合法的拓撲排序不唯一，但計算結果唯一」。
-
-   > **註：** 此初步觀察（「規模越大 DFS 越領先」）在 Final Report 階段的大規模實驗（10–5000 閘 × 三種 DAG 結構）中被修正——真正的變因是 DAG 形狀而非規模。詳見 Final Report 的「主要研究發現」一節。
-
 ### 遇到的困難
 
-1. **迴圈偵測的設計**：DFS 版需要區分「訪問中」和「已完成」兩種狀態才能正確偵測迴圈（back edge），一開始只用 visited 布林值導致誤判。後來改用三態（未訪問 / 訪問中 / 已完成）解決。
+1. **迴圈偵測的設計**：拓撲排序需要在計算前確認電路無迴圈，一開始只用 visited 布林值導致誤判。後來改用三態標記（未訪問 / 訪問中 / 已完成）才能正確分辨 back edge，解決誤判問題。
 
-2. **效能測量的穩定性**：單次執行時間太短（微秒級），受系統排程影響大。改為重複執行 10,000 次取平均後，數據穩定。
-
-3. **4-bit 加法器的 DAG 深度**：4 個全加器串接形成較長的依賴鏈（carry 必須逐級傳播），拓撲排序的結果對計算順序影響較大，這也是當時猜測「規模越大 BFS 和 DFS 的差異越明顯」的原因（後續實驗推翻此假設）。
+2. **進位鏈的依賴順序**：4-bit 加法器由 4 個全加器串接，carry 必須逐級傳播，形成較長的依賴鏈。這讓我具體體會到「為什麼一定要先做拓撲排序」——若計算順序錯誤，後級的閘會讀到尚未更新的輸入，導致結果錯誤。透過拓撲排序確保順序後，512 組輸入皆驗證正確。
 
 ### 下一步計畫
 
 1. **關鍵路徑分析（Critical Path）**：為每個邏輯閘加入傳播延遲值，使用 DAG 最長路徑演算法 + Priority Queue 找出電路的關鍵路徑，計算最大時脈頻率。
 2. **互動式視覺化介面**：以 React 實作網頁版電路視覺化（已有原型），支援即時切換輸入、動態訊號傳播動畫、拓撲排序步進展示。
-3. **更大規模的效能測試**：自動生成 100 閘、1000 閘的隨機電路，觀察 BFS vs DFS 在大規模下的效能差異曲線。
-4. **錄製 Demo 影片**：展示電路模擬功能 + 效能比較結果 + 視覺化介面。
+3. **邏輯化簡（Quine-McCluskey）**：從真值表逆向產生最簡電路，讓工具涵蓋「模擬 → 化簡」完整流程。
+4. **錄製 Demo 影片**：展示電路模擬功能 + Critical Path 分析 + 視覺化介面。
 
 ---
 
@@ -133,29 +110,15 @@ Prototype 階段預計完成以下可驗證的功能：
 
 ### 專案說明
 
-本專題實作了一個 C++ 命令列數位邏輯電路工具，搭配 React 視覺化前端，以「用電路學資料結構」為核心定位：電路本身是一個 有向無環圖（DAG），模擬器透過拓撲排序決定邏輯閘的計算順序，Heap 找出延遲最長的關鍵路徑，讓使用者能清楚看到演算法如何驅動硬體模擬。
+本專題實作了一個 C++ 命令列數位邏輯電路工具，搭配 React 視覺化前端，以「用電路學資料結構」為核心定位：電路本身是一個有向無環圖（DAG），模擬器透過拓撲排序決定邏輯閘的計算順序，再以 Max-Heap 找出延遲最長的關鍵路徑，讓使用者能清楚看到演算法如何驅動硬體模擬。
 
 在模擬之外，本專題進一步以 Quine-McCluskey 演算法（Set Cover 的應用）從真值表逆向產生最簡電路。工具因此涵蓋「模擬 → 化簡」完整流程，從單純的模擬器延伸為小型的電路設計工具鏈。
 
-### 主要研究發現
-
-本專題的實驗階段產生了三個值得記錄的發現：
-
-**1. 演算法效能取決於 DAG 結構，而非規模**
-
-Prototype 階段觀察「規模越大 DFS 越領先」（4-bit 加法器 20 閘下 DFS 快 1.5x），但 `scale_bench`（10–5000 閘隨機 DAG）顯示加速比穩定在 1.1–1.2x、與規模幾乎無關——假設被推翻。
-
-進一步的 `structural_bench` 揭示真正變因是 DAG 形狀：Random / Wide Fanout 下 DFS 比 BFS 快 8–15%；Deep Chain 下三者幾乎相同（±5%）。此結論在實驗規模（≤5000 閘）與測試結構內成立，推廣到更大規模或其他 DAG 應用領域（build system 依賴解析、ML 框架計算圖排程）需進一步驗證。
-
-**2. 理論等價不蘊含實作等價**
-
-我預期 DFS 在深鏈上大勝(因為 cache 友善),但實測發現三種演算法幾乎相同。進一步分析發現,深鏈下每個節點的計算都依賴前一個節點完成,造成 sequential dependency 主導執行時間,演算法層的 cache 差異被淹沒。這顯示一個常被忽略的事實:演算法的『常數因子優勢』必須要有足夠的平行處理能力才能被看見。在 sequential bottleneck 主導的情境下,選用更複雜的資料結構可能是無效的優化。
-
-**3. Critical Path 將抽象資料結構連到具體物理量**
+### 核心觀察：Critical Path 將抽象資料結構連到具體物理量
 
 Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓撲排序確定計算順序 → DP 求每個節點的最長到達延遲 → Max-Heap 反向取出延遲最大的 K 條完整路徑。
 
-這個演算法的輸出可直接換算成電路最高工作頻率（全加器 critical path 7 ns → 142 MHz）。現代 CPU 的時脈設計本質上是同一個「DAG 最長路徑」問題的延伸（工業界 Static Timing Analysis 還會處理 false path、setup/hold time、clock skew 等）。資料結構不是抽象練習，是決定硬體效能的數學基礎。
+這個演算法的輸出可直接換算成電路的最高工作頻率（全加器 critical path 7 ns → 142 MHz）。現代 CPU 的時脈設計本質上就是同一個「DAG 最長路徑」問題的延伸（工業界的 Static Timing Analysis 還會進一步處理 false path、setup/hold time、clock skew 等）。對我而言，這讓資料結構不再只是抽象練習，而是決定硬體效能的數學基礎——這也是這個專案最讓我想深入硬體領域的地方。
 
 ### 最終實作的功能
 
@@ -163,13 +126,10 @@ Top-K 最長路徑搜尋是本專題資料結構協作最緊密的部分：拓�
 |------|------|
 | 6 種邏輯閘 | AND / OR / NOT / XOR / NAND / NOR，OOP 繼承 + 虛擬函式 |
 | 電路描述檔解析 | 自訂 `.txt` 格式，支援 INPUT / OUTPUT / GATE 關鍵字 |
-| BFS 拓撲排序 | Kahn's Algorithm,O(V+E),deque + inDegree map |
-| DFS 拓撲排序（遞迴） | 反向後序遍歷，O(V+E)，三色標記（WHITE/GRAY/BLACK）、含環偵測 |
-| DFS 拓撲排序（迭代） | 顯式 `std::stack` + 三色標記，消除遞迴 overhead |
+| 拓撲排序 | Kahn's Algorithm（BFS，deque + 入度表）與 DFS（三色標記、含環偵測），決定邏輯閘計算順序，O(V+E) |
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
 | **Top-K 最長路徑分析** | DAG 最長路徑 DP（拓撲排序後 relax）+ Max-Heap 反向搜尋前 K 條路徑；輸出路徑序列與延遲總和；可用 `--critical-path K` 指定 K 值 |
-| **效能實驗** | 大規模測試（10–5000 閘）+ 結構性對照實驗（random / deep_chain / wide_fanout）× 三種演算法，輸出 log-log 圖、加速比圖、grouped bar chart |
-| **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、BFS/DFS 排序動畫、Critical Path 高亮；C++ 透過 `--export-json` 匯出資料給前端 |
+| **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、拓撲排序步進動畫、Critical Path 高亮；C++ 透過 `--export-json` 匯出資料給前端 |
 | **Quine-McCluskey 邏輯最小化** | 從 minterm 列表（或直接從 Circuit output 提取）產生最簡 SOP；支援 don't care；演算法：PI 生成 → Essential PI 選取 → 貪心覆蓋 |
 
 ---
@@ -195,7 +155,6 @@ make test     # 執行所有 unit tests（53 個測試）
 3. 2-to-1 MUX（4 閘）
 4. 4-bit 加法器（20 閘）
 5. 從檔案載入
-6. 效能比較模式（比較所有內建電路）
 
 #### 從檔案載入
 
@@ -203,7 +162,7 @@ make test     # 執行所有 unit tests（53 個測試）
 ./simulator src/circuits/full_adder.txt
 ```
 
-輸出：電路資訊 → 拓撲排序順序 → 真值表 → Critical Path Analysis → BFS vs DFS 效能比較
+輸出：電路資訊 → 拓撲排序順序 → 真值表 → Critical Path Analysis
 
 #### Critical Path 指定 K 值
 
@@ -228,25 +187,7 @@ Critical Path 輸出範例（全加器，預設 K=3）：
 ./simulator --export-json output/full_adder.json src/circuits/full_adder.txt
 ```
 
-匯出內容：`nodes`、`edges`、`topo_order_bfs` / `topo_order_dfs`、`critical_paths`（Top-K）、`truth_table`。可搭配 `--critical-path K` 控制匯出幾條路徑，供 React 前端使用。
-
-#### 執行 Benchmark
-
-```bash
-make scale_bench      # 大規模效能測試：7 個規模 × 3 種演算法（BFS / DFS-rec / DFS-iter）
-make structural_bench # 結構性對照實驗：3 種 DAG 結構 × 7 規模 × 3 演算法
-make bench_plot       # 生成所有圖表（需先跑上面兩支）
-```
-
-圖表輸出說明：
-
-| 圖檔 | 說明 |
-|------|------|
-| `results/scale_test_loglog.png` | 隨機 DAG 規模 vs 時間 log-log 圖（含 error bar）|
-| `results/scale_test_speedup.png` | 各規模 DFS-rec / DFS-iter 相對 BFS 的耗時比 grouped bar |
-| `results/structural_loglog.png` | 三種結構 × 三種演算法 log-log 效能圖（9 條線）|
-| `results/structural_speedup.png` | DFS-rec/BFS、DFS-iter/BFS 加速比，三種結構各一子圖 |
-| `results/structural_bar1000.png` | 1000 閘 grouped bar：三種結構 × 三種演算法 |
+匯出內容：`nodes`、`edges`、`topo_order`、`critical_paths`（Top-K）、`truth_table`。可搭配 `--critical-path K` 控制匯出幾條路徑，供 React 前端使用。
 
 #### Quine-McCluskey 邏輯最小化
 
@@ -267,7 +208,7 @@ QMResult r3 = minimizeCircuitOutput(fa, "Cout");
 ```
 
 ```bash
-make test_qm   # 單獨跑 QM 最小化器的 18 個測試
+make test_qm   # 單獨跑 QM 最小化器的測試
 ```
 
 #### 網頁視覺化
@@ -281,7 +222,7 @@ npm run dev     # 開啟 http://localhost:5173
 功能：
 - 電路選擇器（半加器 / 全加器 / MUX / 4-bit 加法器）
 - 點擊 INPUT 節點切換 0/1，即時計算所有閘的輸出
-- BFS / DFS 拓撲排序步進動畫（依排序順序高亮節點）
+- 拓撲排序步進動畫（依排序順序高亮節點）
 - Critical Path 高亮（紅色邊 + 高亮節點）
 - hover tooltip 顯示閘的延遲、輸入值、輸出值
 
@@ -292,17 +233,15 @@ npm run dev     # 開啟 http://localhost:5173
 | 課程概念 | 在本專題中的體現 |
 |----------|----------------|
 | **有向無環圖（DAG）** | 電路本身的資料結構：邏輯閘為節點，連線為有向邊 |
-| **拓撲排序（BFS/DFS）** | 決定閘的計算順序，兩種演算法的完整實作與比較 |
+| **拓撲排序（BFS/DFS）** | 決定閘的計算順序，Kahn's BFS 與三色標記 DFS 的實作 |
 | **雜湊表（Hash Map）** | `unordered_map` 儲存訊號值與元件名稱，O(1) 查詢 |
 | **平衡二元搜尋樹（BST）** | `std::map`（紅黑樹）管理訊號線名稱，維持有序以利真值表輸出 |
 | **堆積與優先權佇列（Heap）** | Critical Path Top-K 搜尋的核心：`std::priority_queue`（Max-Heap）按延遲上界排序，確保前 K 個彈出的完整路徑即為最長 K 條 |
-| **佇列（Queue）** | BFS 的核心資料結構，`deque` 實作 |
-| **堆疊（Stack）** | DFS 的遞迴呼叫堆疊；迭代版用 `std::stack` 顯式管理 |
+| **佇列（Queue）** | BFS 拓撲排序的核心資料結構，`deque` 實作 |
+| **堆疊（Stack）** | DFS 拓撲排序的呼叫堆疊 |
 | **OOP / 繼承 / 多型** | `Gate` 基底類別 → `AndGate`、`OrGate` 等子類別，虛擬函式 `compute()` |
-| **演算法複雜度分析** | O(V+E) 線性的理論分析與實測驗證；log-log 圖呈現 |
+| **演算法複雜度分析** | 拓撲排序與最長路徑皆為 O(V+E) 線性的理論分析與驗證 |
 | **迴圈偵測（三色標記）** | DFS 的 WHITE/GRAY/BLACK 標記，back edge 偵測 |
-| **統計測量** | warm-up / 正式測量 / 均值 / 標準差，避免系統排程抖動影響 |
-| **迭代 vs 遞迴的實作等價性** | `topologicalSortDFSIterative()` 用 `std::stack` 取代遞迴呼叫堆疊，在深度鏈上比遞迴版快 ~4.5%（5000 閘）；實證「stack 與 recursion 等價」的理論在實作層仍有可量化的差距 |
-| **實驗設計與對照分析** | 三種 DAG 結構 × 三種演算法的系統性對照；Random / Wide Fanout 下 DFS 比 BFS 快 8–15%、Deep Chain 下三者幾乎相同（±5%），符合 BFS queue 操作常數因子較高的理論預期 |
+| **Set Cover（貪心覆蓋）** | Quine-McCluskey 的 Essential PI 選取與貪心覆蓋步驟 |
 
-總結來說，本專題不僅實作了課程教授的多種資料結構，更透過系統性的對照實驗，驗證了這些資料結構在實務情境下的選擇取捨。對我個人而言，這個專案讓資料結構從「課本上的演算法」變成「能解釋電腦為什麼跑這麼快」的具體工具——這比通過任何單元測試都更值得記住。
+總結來說，本專題把課程教授的多種資料結構，透過一個能實際運作的硬體模擬工具串接起來。對我個人而言，這個專案讓資料結構從「課本上的演算法」變成「能解釋電腦為什麼跑這麼快」的具體工具——尤其是 Critical Path 直接換算成時脈頻率的那一刻，這比通過任何單元測試都更值得記住。
