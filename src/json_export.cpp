@@ -255,6 +255,64 @@ bool exportCircuitToJson(Circuit& circuit,
 }
 
 // ============================================================
+// qmStepsToJson：序列化 QM 中間結果為 JSON 子物件字串
+// ============================================================
+static std::string qmStepsToJson(const QMResult& r, const std::string& indent = "  ") {
+    std::ostringstream j;
+    j << "{\n";
+
+    // input_minterms
+    j << indent << "  \"input_minterms\": [";
+    for (int i = 0; i < (int)r.inputMinterms.size(); i++) {
+        if (i > 0) j << ", ";
+        j << r.inputMinterms[i];
+    }
+    j << "],\n";
+
+    // prime_implicants
+    j << indent << "  \"prime_implicants\": [\n";
+    for (int i = 0; i < (int)r.piRecords.size(); i++) {
+        if (i > 0) j << ",\n";
+        const auto& pi = r.piRecords[i];
+        j << indent << "    {\n";
+        j << indent << "      \"index\": "     << i << ",\n";
+        j << indent << "      \"term\": \""    << jsonEscape(pi.term) << "\",\n";
+        j << indent << "      \"minterms\": [";
+        for (int k = 0; k < (int)pi.minterms.size(); k++) {
+            if (k > 0) j << ", ";
+            j << pi.minterms[k];
+        }
+        j << "],\n";
+        j << indent << "      \"essential\": " << (pi.essential ? "true" : "false") << ",\n";
+        j << indent << "      \"selected\": "  << (pi.selected  ? "true" : "false") << "\n";
+        j << indent << "    }";
+    }
+    j << "\n" << indent << "  ],\n";
+
+    // coverage_table（以 minterm 排序，確保輸出確定性）
+    std::vector<int> sortedMints;
+    sortedMints.reserve(r.mintermToPIs.size());
+    for (const auto& kv : r.mintermToPIs) sortedMints.push_back(kv.first);
+    std::sort(sortedMints.begin(), sortedMints.end());
+
+    j << indent << "  \"coverage_table\": [\n";
+    for (int k = 0; k < (int)sortedMints.size(); k++) {
+        if (k > 0) j << ",\n";
+        int m = sortedMints[k];
+        const auto& piList = r.mintermToPIs.at(m);
+        j << indent << "    {\"minterm\": " << m << ", \"pi_indices\": [";
+        for (int p = 0; p < (int)piList.size(); p++) {
+            if (p > 0) j << ", ";
+            j << piList[p];
+        }
+        j << "]}";
+    }
+    j << "\n" << indent << "  ]\n";
+    j << indent << "}";
+    return j.str();
+}
+
+// ============================================================
 // exportQMToJson：.tt → QM 分析 → JSON
 // ============================================================
 
@@ -471,6 +529,9 @@ bool exportQMToJson(const std::string& ttPath,
     j << "\n    ]\n";
     j << "  },\n";
 
+    // qm_steps（中間結果）
+    j << "  \"qm_steps\": " << qmStepsToJson(qmResult) << ",\n";
+
     // direct_circuit
     j << "  \"direct_circuit\": ";
     if (directOpt.has_value()) {
@@ -506,6 +567,74 @@ bool exportQMToJson(const std::string& ttPath,
         std::cerr << "錯誤：無法寫入 " << outputPath << "\n";
         return false;
     }
+    out << j.str();
+    return true;
+}
+
+// ============================================================
+// exportQMToStream：直接從已解析資料輸出 JSON 到任意 ostream
+// ============================================================
+bool exportQMToStream(std::ostream& out,
+                      int numVars,
+                      const std::vector<int>& minterms,
+                      const std::vector<int>& dontCares,
+                      const std::vector<std::string>& varNames,
+                      int topK)
+{
+    QMResult qmResult = minimize(numVars, minterms, dontCares, varNames);
+    if (qmResult.numVars == 0) {
+        std::cerr << "錯誤：QM 最小化失敗\n";
+        return false;
+    }
+
+    std::optional<Circuit> directOpt    = mintermToCircuit(numVars, minterms, varNames, "F");
+    std::optional<Circuit> minimizedOpt = sopToCircuit(qmResult, "F");
+
+    std::ostringstream j;
+    j << "{\n";
+    j << "  \"source_file\": \"inline\",\n";
+
+    j << "  \"qm_result\": {\n";
+    j << "    \"num_vars\": " << qmResult.numVars << ",\n";
+    j << "    \"var_names\": [";
+    for (int i = 0; i < (int)qmResult.varNames.size(); i++) {
+        if (i > 0) j << ", ";
+        j << "\"" << jsonEscape(qmResult.varNames[i]) << "\"";
+    }
+    j << "],\n";
+    j << "    \"sop\": \"" << jsonEscape(qmResultToString(qmResult)) << "\",\n";
+    j << "    \"term_count\": " << qmResult.terms.size() << ",\n";
+    j << "    \"terms\": [\n";
+    for (int t = 0; t < (int)qmResult.terms.size(); t++) {
+        if (t > 0) j << ",\n";
+        const auto& pt = qmResult.terms[t];
+        j << "      {\"literals\": [";
+        bool firstLit = true;
+        for (int i = 0; i < qmResult.numVars; i++) {
+            if (!((pt.care >> i) & 1)) continue;
+            if (!firstLit) j << ", ";
+            firstLit = false;
+            j << "\"" << jsonEscape(qmResult.varNames[i]);
+            if (!((pt.polarity >> i) & 1)) j << "'";
+            j << "\"";
+        }
+        j << "]}";
+    }
+    j << "\n    ]\n";
+    j << "  },\n";
+
+    j << "  \"qm_steps\": " << qmStepsToJson(qmResult) << ",\n";
+
+    j << "  \"direct_circuit\": ";
+    if (directOpt.has_value()) j << circuitToJsonObject(*directOpt, topK, "  ");
+    else j << "null";
+    j << ",\n";
+
+    j << "  \"minimized_circuit\": ";
+    if (minimizedOpt.has_value()) j << circuitToJsonObject(*minimizedOpt, topK, "  ");
+    else j << "null";
+    j << "\n}\n";
+
     out << j.str();
     return true;
 }

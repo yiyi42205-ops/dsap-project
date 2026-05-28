@@ -3,6 +3,7 @@
 #include "json_export.h"
 #include "sop_to_circuit.h"
 #include "qm_minimizer.h"
+#include <sstream>
 
 // ============================================================
 // 4. 內建範例電路
@@ -84,6 +85,7 @@ int main(int argc, char* argv[]) {
     std::string fileArg    = "";
     std::string exportJson = ""; // --export-json <path>，空字串表示不匯出
     std::string qmArg      = ""; // --qm <file.tt>
+    std::string inlineArg  = ""; // --qm-inline "numVars;mints;dcs;vars"
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--critical-path" && i + 1 < argc) {
@@ -98,6 +100,8 @@ int main(int argc, char* argv[]) {
             exportJson = argv[++i];
         } else if (arg == "--qm" && i + 1 < argc) {
             qmArg = argv[++i];
+        } else if (arg == "--qm-inline" && i + 1 < argc) {
+            inlineArg = argv[++i];
         } else {
             fileArg = arg;
         }
@@ -126,6 +130,57 @@ int main(int argc, char* argv[]) {
             if (!exportQMToJson(qmArg, exportJson, topK)) return 1;
             std::cout << "Exported to " << exportJson << "\n";
         }
+        return 0;
+    }
+
+    // ── --qm-inline 模式：直接帶入 minterms，JSON 輸出到 stdout ──
+    // 格式："numVars;m1,m2,...;dc1,...;varA,varB,..."（後三段可空）
+    if (!inlineArg.empty()) {
+        auto splitSemi = [](const std::string& s) {
+            std::vector<std::string> segs;
+            std::string cur;
+            for (char c : s) {
+                if (c == ';') { segs.push_back(cur); cur.clear(); }
+                else cur += c;
+            }
+            segs.push_back(cur);
+            return segs;
+        };
+        auto parseInts = [](const std::string& s) {
+            std::vector<int> v;
+            if (s.empty()) return v;
+            std::istringstream ss(s);
+            std::string tok;
+            while (std::getline(ss, tok, ','))
+                if (!tok.empty()) v.push_back(std::stoi(tok));
+            return v;
+        };
+        auto parseStrs = [](const std::string& s) {
+            std::vector<std::string> v;
+            if (s.empty()) return v;
+            std::istringstream ss(s);
+            std::string tok;
+            while (std::getline(ss, tok, ','))
+                if (!tok.empty()) v.push_back(tok);
+            return v;
+        };
+
+        auto segs = splitSemi(inlineArg);
+        while ((int)segs.size() < 4) segs.push_back("");
+
+        int numVars = 0;
+        try { numVars = std::stoi(segs[0]); }
+        catch (...) {
+            std::cerr << "錯誤：--qm-inline 第一段不是有效整數\n";
+            return 1;
+        }
+
+        auto minterms  = parseInts(segs[1]);
+        auto dontCares = parseInts(segs[2]);
+        auto varNames  = parseStrs(segs[3]);
+
+        if (!exportQMToStream(std::cout, numVars, minterms, dontCares, varNames, topK))
+            return 1;
         return 0;
     }
 

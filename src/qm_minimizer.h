@@ -38,6 +38,14 @@ struct ProductTerm {
                         // 僅當 care bit i=1 時有意義
 };
 
+// Prime Implicant 記錄（QM 中間步驟，供外部詳解使用）
+struct PIRecord {
+    std::string      term;      // 可讀式，如 "AB'" 或 "1"（恆真項）
+    std::vector<int> minterms;  // 此 PI 覆蓋的 care minterms（已排序）
+    bool essential = false;     // Step 5 選出：某 minterm 唯一由此 PI 覆蓋
+    bool selected  = false;     // 最終入選解（essential 或 greedy）
+};
+
 // 最小化結果
 struct QMResult {
     int numVars = 0;
@@ -45,6 +53,11 @@ struct QMResult {
     std::vector<ProductTerm> terms;     // SOP 各乘積項
     // terms 為空          → 函數恆 0
     // terms 含 care=0 項  → 函數恆 1（此時 terms.size()==1）
+
+    // 中間結果（QM 演算法步驟資訊，供外部詳解使用）
+    std::vector<int>                         inputMinterms; // 輸入的 minterms
+    std::vector<PIRecord>                    piRecords;     // 所有 PI 及選取狀態
+    std::unordered_map<int, std::vector<int>> mintermToPIs; // minterm → PI index 清單
 };
 
 // ============================================================
@@ -211,13 +224,41 @@ inline QMResult minimize(int numVars,
             if (covers(primeImplicants[i], m))
                 mintermToPIs[m].push_back(i);
 
+    // ── 儲存中間結果：覆蓋表與 PI 記錄 ─────────────────────
+    result.inputMinterms = minterms;
+    result.mintermToPIs  = mintermToPIs;
+    {
+        // 把每個 PI 轉成可讀字串（與 Step 7 的 bit 對應規則相同）
+        auto piToStr = [&](const Implicant& pi) -> std::string {
+            std::string s;
+            for (int j = 0; j < numVars; j++) {
+                if ((pi.mask >> j) & 1) continue; // don't care bit
+                int varIdx = numVars - 1 - j;
+                s += result.varNames[varIdx];
+                if (!((pi.value >> j) & 1)) s += "'";
+            }
+            return s.empty() ? "1" : s;
+        };
+        result.piRecords.resize(numPIs);
+        for (int i = 0; i < numPIs; i++)
+            result.piRecords[i].term = piToStr(primeImplicants[i]);
+        // 從覆蓋表反查每個 PI 覆蓋了哪些 minterms
+        for (const auto& kv : mintermToPIs)
+            for (int piIdx : kv.second)
+                result.piRecords[piIdx].minterms.push_back(kv.first);
+        for (auto& pir : result.piRecords)
+            std::sort(pir.minterms.begin(), pir.minterms.end());
+    }
+
     // ── Step 5：選 Essential PIs ────────────────────────────
     std::unordered_set<int> uncovered(minterms.begin(), minterms.end());
     std::vector<bool> selected(numPIs, false);
 
-    // 選中 PI idx：標記 selected，並從 uncovered 移除其覆蓋的 minterms
-    auto selectPI = [&](int idx) {
+    // 選中 PI idx：標記 selected 及 piRecords，並從 uncovered 移除其覆蓋的 minterms
+    auto selectPI = [&](int idx, bool ess = false) {
         selected[idx] = true;
+        result.piRecords[idx].selected  = true;
+        result.piRecords[idx].essential = ess;
         for (int m : minterms)
             if (covers(primeImplicants[idx], m))
                 uncovered.erase(m);
@@ -233,7 +274,7 @@ inline QMResult minimize(int numVars,
             for (int pi : mintermToPIs[m])
                 if (!selected[pi]) avail.push_back(pi);
             if (avail.size() == 1) {
-                selectPI(avail[0]);
+                selectPI(avail[0], true); // essential PI
                 found = true;
                 break; // uncovered 已改變，重新從頭掃描
             }

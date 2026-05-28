@@ -4,7 +4,9 @@
 
 #include "circuit.h"
 #include "critical_path.h"
+#include <ostream>
 #include <string>
+#include <vector>
 
 // 從檔案路徑取出 circuit name（basename，去除副檔名）
 // 例："src/circuits/full_adder.txt" → "full_adder"
@@ -30,3 +32,12 @@ bool exportCircuitToJson(Circuit& circuit,
 bool exportQMToJson(const std::string& ttPath,
                     const std::string& outputPath,
                     int topK = 3);
+
+// 直接從已解析的資料執行 QM 最小化，將 JSON 寫入任意 ostream（例如 std::cout）。
+// 不需要 .tt 檔，適用於 --qm-inline 等直接輸入場景。
+bool exportQMToStream(std::ostream& out,
+                      int numVars,
+                      const std::vector<int>& minterms,
+                      const std::vector<int>& dontCares,
+                      const std::vector<std::string>& varNames,
+                      int topK = 3);
