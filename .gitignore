@@ -1,5 +1,8 @@
 a.out
 simulator
+simulator_asan
+*.dSYM/
+.DS_Store
 output/
 web/node_modules/
 *.o
