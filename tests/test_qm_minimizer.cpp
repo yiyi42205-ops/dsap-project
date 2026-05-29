@@ -301,6 +301,114 @@ bool test_error_invalid_output() {
     return true;
 }
 
+// ============================================================
+// Petrick's method vs 貪心法 對照測試
+// ============================================================
+//
+// 每題同時跑 minimize()（Petrick's）與 minimizeGreedy()（貪心），
+// 驗證：
+//   1. 兩者都正確覆蓋所有 minterms（verifySOP 通過）
+//   2. Petrick's 項數 ≤ 貪心項數（保證最簡性）
+//
+// 同時印出對照表供報告使用。
+
+struct CompareCase {
+    std::string               label;
+    int                       numVars;
+    std::vector<int>          minterms;
+    std::vector<int>          dontCares;
+    std::vector<std::string>  varNames;
+};
+
+// 對單一題目執行對照，回傳 true 代表測試通過
+static bool runCompare(const CompareCase& tc) {
+    auto rP = minimize     (tc.numVars, tc.minterms, tc.dontCares, tc.varNames);
+    auto rG = minimizeGreedy(tc.numVars, tc.minterms, tc.dontCares, tc.varNames);
+    int np = (int)rP.terms.size();
+    int ng = (int)rG.terms.size();
+    bool okP = (rP.numVars > 0) && verifySOP(rP, tc.minterms, tc.dontCares);
+    bool okG = (rG.numVars > 0) && verifySOP(rG, tc.minterms, tc.dontCares);
+    // Petrick's 項數必須 ≤ 貪心項數
+    bool optimal = (np <= ng);
+    // 對照列（印到 stdout，不影響 PASS/FAIL 計數）
+    std::string lbl = tc.label;
+    while ((int)lbl.size() < 34) lbl += ' ';
+    std::string status = (okP && okG && optimal) ? "OK  " : "FAIL";
+    std::cout << "    | " << lbl
+              << " | Petrick's=" << np
+              << "  Greedy=" << ng
+              << "  " << status << "\n";
+    return okP && okG && optimal;
+}
+
+// 對照：F(A,B) = Σm(0,1,3) → 2 項（兩者相同）
+bool test_compare_2var() {
+    CompareCase tc{"2var Σm(0,1,3)", 2, {0,1,3}, {}, {"A","B"}};
+    EXPECT(runCompare(tc), "2var 對照失敗");
+    return true;
+}
+
+// 對照：F(A,B,C) = Σm(0,1,2,3,4,6) → 2 項（兩者相同）
+bool test_compare_3var() {
+    CompareCase tc{"3var Σm(0,1,2,3,4,6)", 3, {0,1,2,3,4,6}, {}, {"A","B","C"}};
+    EXPECT(runCompare(tc), "3var 對照失敗");
+    return true;
+}
+
+// 對照：F(A,B,C,D) = Σm(0,1,2,5,6,7,8,9,10,14) → 3 項
+bool test_compare_4var_classic() {
+    CompareCase tc{"4var Σm(0,1,2,5,6,7,8,9,10,14)", 4, {0,1,2,5,6,7,8,9,10,14}, {}, {"A","B","C","D"}};
+    EXPECT(runCompare(tc), "4var classic 對照失敗");
+    return true;
+}
+
+// 對照：循環覆蓋表（cyclic chart）— 8 個 PI，無 essential PI
+// F(A,B,C,D) = Σm(2,3,5,7,8,10,12,13)
+// Petrick's 保證選出 4 項的最小覆蓋；貪心可能亦為 4 項或更多
+bool test_compare_cyclic() {
+    CompareCase tc{"4var cyclic Σm(2,3,5,7,8,10,12,13)", 4, {2,3,5,7,8,10,12,13}, {}, {"A","B","C","D"}};
+    EXPECT(runCompare(tc), "cyclic 對照失敗");
+    // 額外驗證：Petrick's 選出 4 項（本題已知最小解）
+    auto rP = minimize(4, {2,3,5,7,8,10,12,13}, {}, {"A","B","C","D"});
+    EXPECT((int)rP.terms.size() == 4, "cyclic 最小解應為 4 項");
+    return true;
+}
+
+// 對照：含 don't care
+// F(A,B,C) = Σm(1,3,7) + d(0,5) → 1 項
+bool test_compare_with_dc() {
+    CompareCase tc{"3var+DC Σm(1,3,7)+d(0,5)", 3, {1,3,7}, {0,5}, {"A","B","C"}};
+    EXPECT(runCompare(tc), "don't care 對照失敗");
+    return true;
+}
+
+// 對照：5 變數
+// F(A,B,C,D,E) = Σm(0,1,4,5,16,17,20,21) → 應化簡為 A'C' 或 2 項以內
+bool test_compare_5var() {
+    std::vector<int> ms = {0,1,4,5,16,17,20,21};
+    CompareCase tc{"5var Σm(0,1,4,5,16,17,20,21)", 5, ms, {}, {"A","B","C","D","E"}};
+    EXPECT(runCompare(tc), "5var 對照失敗");
+    // 額外驗證覆蓋正確性
+    auto rP = minimize(5, ms, {}, {"A","B","C","D","E"});
+    EXPECT(verifySOP(rP, ms), "5var SOP 未正確覆蓋 minterms");
+    return true;
+}
+
+// 對照：4 變數全部 essential PI（無循環）— majority 類
+// full adder Cout: Σm(3,5,6,7)
+bool test_compare_majority() {
+    CompareCase tc{"3var majority Σm(3,5,6,7)", 3, {3,5,6,7}, {}, {"A","B","Cin"}};
+    EXPECT(runCompare(tc), "majority 對照失敗");
+    return true;
+}
+
+// 對照：單一乘積項
+bool test_compare_single_term() {
+    CompareCase tc{"3var single Σm(5)", 3, {5}, {}, {"A","B","C"}};
+    EXPECT(runCompare(tc), "single term 對照失敗");
+    return true;
+}
+
 // ── 主程式 ───────────────────────────────────────────────────
 int main() {
     std::cout << "\n╔══════════════════════════════════════════════╗\n";
@@ -334,6 +442,18 @@ int main() {
     run("error_overlap",                test_error_overlap);
     run("error_varnames_length",        test_error_varnames_length);
     run("error_invalid_output",         test_error_invalid_output);
+
+    std::cout << "\n=== Petrick's vs 貪心 對照表 ===\n";
+    std::cout << "    | 題目                             | Petrick's  | Greedy  | 狀態\n";
+    std::cout << "    |----------------------------------|------------|---------|------\n";
+    run("compare_2var",                 test_compare_2var);
+    run("compare_3var",                 test_compare_3var);
+    run("compare_4var_classic",         test_compare_4var_classic);
+    run("compare_cyclic (4var, 8PI)",   test_compare_cyclic);
+    run("compare_with_dc",              test_compare_with_dc);
+    run("compare_5var",                 test_compare_5var);
+    run("compare_majority",             test_compare_majority);
+    run("compare_single_term",          test_compare_single_term);
 
     std::cout << "\n";
     if (g_failed == 0)

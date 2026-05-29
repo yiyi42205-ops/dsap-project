@@ -489,7 +489,7 @@ bool exportQMToJson(const std::string& ttPath,
     }
 
     // ── 建兩個電路（可能是 nullopt）──────────────────────────
-    std::optional<Circuit> directOpt   = mintermToCircuit(numVars, minterms, varNames, "F");
+    std::optional<Circuit> directOpt   = mintermToCircuit(numVars, minterms, qmResult.varNames, "F");
     std::optional<Circuit> minimizedOpt = sopToCircuit(qmResult, "F");
 
     // ── 建構 JSON ─────────────────────────────────────────────
@@ -587,7 +587,8 @@ bool exportQMToStream(std::ostream& out,
         return false;
     }
 
-    std::optional<Circuit> directOpt    = mintermToCircuit(numVars, minterms, varNames, "F");
+    // 使用 qmResult.varNames（已補好 x0,x1,... 預設名稱），避免原始 varNames 為空時越界
+    std::optional<Circuit> directOpt    = mintermToCircuit(numVars, minterms, qmResult.varNames, "F");
     std::optional<Circuit> minimizedOpt = sopToCircuit(qmResult, "F");
 
     std::ostringstream j;

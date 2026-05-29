@@ -171,72 +171,87 @@ export default function QMViewer() {
   }
 
   // ── 組 prompt（演算法答案全部帶入，AI 只負責講解）──────────
+  //
+  // 設計原則：
+  //   ・所有數值均由 C++ QM 演算法計算，AI 只解釋，不推導
+  //   ・固定四步骨架：① 全部 PI → ② essential PI → ③ Petrick's → ④ 化簡效益
+  //   ・每步一句結論 + 最多一句「為什麼」，全文不超過 12 句
+  //   ・術語第一次出現加最短括注，之後直接用
+  //   ・輸出語言：繁體中文（台灣用語）
   function buildPrompt(data) {
-    const result   = data.qm_result;
-    const steps    = data.qm_steps;
-    const varNames = result.var_names.join(', ');
-    const sop      = result.sop;
-    const minterms = steps.input_minterms.join(', ');
+    const result = data.qm_result;
+    const steps  = data.qm_steps;
+    const sop    = result.sop;
 
-    const allPIs = steps.prime_implicants.map(pi =>
-      `  PI[${pi.index}] ${pi.term}，覆蓋 minterms {${pi.minterms.join(', ')}}`
-    ).join('\n');
+    // 全部 PI：單行格式，方便 AI 直接引用
+    const allPIsLine = steps.prime_implicants
+      .map(pi => `${pi.term}{${pi.minterms.join(',')}}`)
+      .join('；');
 
-    const essentials = steps.prime_implicants.filter(pi => pi.essential);
-    const greedy     = steps.prime_implicants.filter(pi => pi.selected && !pi.essential);
+    // Essential PI 清單
+    const essPIs    = steps.prime_implicants.filter(pi => pi.essential);
+    const petPIs    = steps.prime_implicants.filter(pi => pi.selected && !pi.essential);
 
-    const essStr = essentials.length
-      ? essentials.map(pi => `  ${pi.term}（覆蓋 {${pi.minterms.join(', ')}}）`).join('\n')
-      : '  （無）';
+    const essLine = essPIs.length
+      ? essPIs.map(pi => `${pi.term}（蓋 {${pi.minterms.join(',')}}）`).join('、')
+      : '無';
 
-    const greedyStr = greedy.length
-      ? greedy.map(pi => `  ${pi.term}（覆蓋 {${pi.minterms.join(', ')}}）`).join('\n')
-      : '  （無，Essential PIs 已覆蓋全部 minterms）';
+    const petLine = petPIs.length
+      ? petPIs.map(pi => `${pi.term}（蓋 {${pi.minterms.join(',')}}）`).join('、')
+      : '無（essential PI 已完整覆蓋）';
 
-    const coverStr = steps.coverage_table.map(row => {
-      const piNames = row.pi_indices
-        .map(i => `[${i}]${steps.prime_implicants[i].term}`)
-        .join('、');
-      return `  m${row.minterm}：被 ${piNames} 覆蓋`;
-    }).join('\n');
+    // Essential PI 選完後的剩餘 minterms（交給 Petrick's 的那些）
+    const covByEss  = new Set(essPIs.flatMap(pi => pi.minterms));
+    const remaining = steps.input_minterms.filter(m => !covByEss.has(m));
+    const remStr    = remaining.length > 0 ? `{${remaining.join(',')}}` : '（無）';
 
-    return `你是一位數位邏輯課程的教學助理。以下所有數值均由 Quine-McCluskey 演算法嚴格計算得出，是唯一正確答案。
+    // 化簡前 literal 數：每個 minterm 展開需要 num_vars 個 literal
+    const beforeLits = steps.input_minterms.length * result.num_vars;
+    // 化簡後 literal 數：從 qm_result.terms[].literals 精確加總
+    const afterLits  = result.terms.reduce((s, t) => s + t.literals.length, 0);
+    const savedLits  = Math.max(0, beforeLits - afterLits);
+    const savedTerms = Math.max(0, steps.input_minterms.length - result.term_count);
 
-【你的角色與限制——請先讀完再開始】
-- 你的任務是「解釋」下面這組已知答案，不是重新推導、驗證或重算。
-- 最簡 SOP 是「${sop}」，由演算法保證，這是不可動搖的事實。
-- 絕對不可以提出任何你認為「更簡」或「不同」的替代答案。
-- 若你自己推導出的結果與「${sop}」不同，請優先假設你的推導有誤，說明你的疑問，但仍以「${sop}」為基礎做講解。
-- 不准擅自挑選或替換任何 Prime Implicant；請完全以下方「演算法實際選中的這組」為準。
+    return `你是數位邏輯課的教學助理。
 
-【演算法輸入】
-變數：${varNames}
-Minterms：${minterms}
+【硬性規則——違反即失格，請先讀完】
+所有式子和數字均由 Quine-McCluskey 演算法（含 Petrick's method）計算，是唯一正確答案。
+你只能「解釋」這份答案，不可自行推導、驗算，也不可提出任何替代答案。
+最簡 SOP 是「${sop}」，不可更動。若你算出不同結果，代表你算錯了，請仍以「${sop}」為準。
+輸出語言：繁體中文（台灣用語）。
 
-【最終答案（不可更改）】
-最簡 SOP：${sop}
+【演算法資料（ground truth，禁止修改）】
+變數：${result.var_names.join(', ')}
+輸入 minterms：${steps.input_minterms.join(', ')}
+全部 PI（共 ${steps.prime_implicants.length} 個）：${allPIsLine}
+Essential PI：${essLine}
+Petrick's 補選：${petLine}
+最簡 SOP：${sop}（${result.term_count} 個乘積項，${afterLits} 個 literal）
 
-【QM 演算法中間步驟——以下資料均由 C++ 演算法計算，不是你推導的】
+【輸出格式——嚴格照做，不得擅自增加內容】
+依序輸出四個步驟，每步一個標題。
+每步：第一句是一句白話重點結論，第二句（選填）補一句「為什麼」。每步最多三句。
+全文不超過 12 句、350 字。
+術語第一次出現加最短括注，例如「essential PI（某 minterm 只有它蓋得到，非選不可）」，之後直接用。
 
-全部 Prime Implicants（相鄰 minterms 合併到不能再合併為止）：
-${allPIs}
+① Prime Implicants（質主項）是什麼
+  用一句話說清楚：共幾個 PI，它們各覆蓋哪些 minterms。
+  可補一句：舉最典型的一兩個例子，說明是哪幾個 minterm 合併、消去了哪個變數。
 
-Essential Prime Implicants（某個 minterm 唯一由此 PI 覆蓋，因此必選）：
-${essStr}
+② Essential PI 為什麼非選不可
+  用一句話說：哪些是 essential PI，為什麼（覆蓋表中某 minterm 只被它蓋到，非選不可）。
+  可補一句：這些 essential PI 合起來蓋了哪些 minterm。
+  若 essLine 為「無」，說「本題無 essential PI，全部由 Petrick's 決定」。
 
-Greedy 補選的 PI（Essential 選完後，以貪心法補蓋剩餘 minterms）：
-${greedyStr}
+③ Petrick's method 怎麼選到項數最少
+  用一句話說：essential PI 選完後，剩餘 minterms ${remStr} 由 Petrick's 從候選 PI 中選出「${petLine}」，這樣保證項數最少。
+  可補一句：Petrick's 展開所有可能的覆蓋組合，挑項數最少的那組，所以結果保證最簡。
+  若 remStr 為「（無）」，說「essential PI 已完整覆蓋，Petrick's 不需補選」。
 
-覆蓋表（每個 minterm 被哪些 PI 覆蓋）：
-${coverStr}
+④ 化簡效益
+  用一句話說：化簡前要 ${steps.input_minterms.length} 個乘積項（共 ${beforeLits} 個 literal），化簡後「${sop}」只需 ${result.term_count} 個乘積項（${afterLits} 個 literal），節省了 ${savedLits} 個 literal、減少 ${savedTerms} 個乘積項。
 
-【請用繁體中文解釋以下四點，語氣輕鬆易懂，適合第一次學 QM 化簡的學生】
-1. 每個 Prime Implicant 是如何從相鄰 minterms 合併而來的——說明哪幾個 minterms 合併、消去了哪個變數、得到哪個乘積項。
-2. 哪些是 Essential PI，原因是什麼（從覆蓋表看出某 minterm 只被這個 PI 覆蓋）。
-3. 整個選取流程：先選 Essential PI，若剩餘 minterms 尚未覆蓋則 Greedy 補選。
-4. 化簡效益：化簡前展開 SOP 有 ${steps.input_minterms.length} 個 minterm（每個需要 ${result.num_vars} 個 literal），化簡後只需「${sop}」（共 ${result.term_count} 個乘積項），說明節省了多少 literal 和閘數。
-
-最後再次確認：最簡 SOP 是「${sop}」，請以此為基礎講解，不要質疑或重算。`;
+最後一行只寫：最簡 SOP = ${sop}`;
   }
 
   // ── 呼叫 Gemini API 取得白話詳解 ────────────────────────────
@@ -405,7 +420,7 @@ ${coverStr}
           </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 20px', marginTop: 3 }}>
             {qmData.qm_steps.prime_implicants.map(pi => {
-              const tag  = pi.essential ? '★ Ess' : pi.selected ? '○ Greedy' : '× 未選';
+              const tag  = pi.essential ? '★ Ess' : pi.selected ? '○ Petrick\'s' : '× 未選';
               const color = pi.essential ? '#1d4ed8' : pi.selected ? '#15803d' : '#9ca3af';
               return (
                 <span key={pi.index} style={{ color }}>
