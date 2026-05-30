@@ -1,9 +1,0 @@
-# simple_loop.txt — 最簡單的 2-gate 迴圈
-# 形狀：wire_A → NOT_B → wire_B → NOT_A → wire_A
-# 兩個 NOT 閘互相依賴，形成最小迴圈單位
-# BFS 偵測：兩個閘的 indegree 永遠不會降為 0 → bfsOrder.size() != gates.size()
-# DFS 偵測：從 NOT_A 出發，訪問 NOT_A(GRAY)，沿 adj 到 NOT_B，
-#           NOT_B 的 adj 包含 NOT_A（已是 GRAY） → 發現 back edge
-
-GATE NOT NOT_A wire_B -> wire_A
-GATE NOT NOT_B wire_A -> wire_B

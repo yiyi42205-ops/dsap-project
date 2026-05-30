@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import QMCircuitPanel from './QMCircuitPanel.jsx';
 import { propagateSignals } from './gateLogic.js';
 
@@ -104,10 +104,16 @@ export default function QMViewer() {
   const [form, setForm]             = useState({ numVars: '3', varNames: '', minterms: '', dontCares: '' });
   const [solving, setSolving]       = useState(false);
   const [solveError, setSolveError] = useState('');
-  const [apiKey, setApiKey]               = useState('');
-  const [aiExplanation, setAiExplanation] = useState('');
-  const [explaining, setExplaining]       = useState(false);
-  const [explainError, setExplainError]   = useState('');
+
+  const [apiKey, setApiKey]             = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [chatMessages, setChatMessages] = useState([]); // { role: 'user'|'assistant', text: string }[]
+  const [chatInput, setChatInput]       = useState('');
+  const [chatLoading, setChatLoading]   = useState(false);
+  const [chatError, setChatError]       = useState('');
+  const [highlightedNodeId, setHighlightedNodeId] = useState(null);
+
+  const chatBottomRef = useRef(null);
 
   // ── 載入 QM JSON（僅 preset 模式）──────────────────────────
   useEffect(() => {
@@ -118,8 +124,7 @@ export default function QMViewer() {
       .then(data => {
         setQmData(data);
         setInputValues(initInputs(data.direct_circuit));
-        setAiExplanation('');
-        setExplainError('');
+        resetChat();
       });
   }, [qmIdx, inputMode]);
 
@@ -133,6 +138,19 @@ export default function QMViewer() {
     if (!qmData?.minimized_circuit) return;
     setSignalMapMinimized(propagateSignals(qmData.minimized_circuit, inputValues));
   }, [qmData, inputValues]);
+
+  // ── 捲到最新訊息 ─────────────────────────────────────────
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, chatLoading]);
+
+  function resetChat() {
+    setChatMessages([]);
+    setChatInput('');
+    setChatError('');
+    setSystemPrompt('');
+    setHighlightedNodeId(null);
+  }
 
   // ── 自訂題目送出 ────────────────────────────────────────────
   async function handleSolve(e) {
@@ -161,8 +179,7 @@ export default function QMViewer() {
       if (!res.ok) throw new Error(data.error || '計算失敗');
       setQmData(data);
       setInputValues(initInputs(data.direct_circuit));
-      setAiExplanation('');
-      setExplainError('');
+      resetChat();
     } catch (err) {
       setSolveError(err.message);
     } finally {
@@ -178,6 +195,7 @@ export default function QMViewer() {
   //   ・每步一句結論 + 最多一句「為什麼」，全文不超過 12 句
   //   ・術語第一次出現加最短括注，之後直接用
   //   ・輸出語言：繁體中文（台灣用語）
+  //   ・提到電路節點時用 [node:ID] 標記，方便高亮
   function buildPrompt(data) {
     const result = data.qm_result;
     const steps  = data.qm_steps;
@@ -212,6 +230,10 @@ export default function QMViewer() {
     const savedLits  = Math.max(0, beforeLits - afterLits);
     const savedTerms = Math.max(0, steps.input_minterms.length - result.term_count);
 
+    // 電路節點 ID（化簡版）
+    const minNodes = data.minimized_circuit?.nodes ?? [];
+    const allNodeIds = minNodes.map(n => n.id).join(', ');
+
     return `你是數位邏輯課的教學助理。
 
 【硬性規則——違反即失格，請先讀完】
@@ -227,6 +249,11 @@ export default function QMViewer() {
 Essential PI：${essLine}
 Petrick's 補選：${petLine}
 最簡 SOP：${sop}（${result.term_count} 個乘積項，${afterLits} 個 literal）
+
+【電路節點（化簡版電路，可供學生高亮查看）】
+節點 ID 清單：${allNodeIds}
+在解釋中，當你提到某個具體的閘或節點時，請用 [node:節點ID] 標記，例如「[node:AND_t0] 負責計算乘積項 AB」。
+學生點擊這個標記後，對應的閘會在電路圖上高亮顯示。
 
 【輸出格式——嚴格照做，不得擅自增加內容】
 依序輸出四個步驟，每步一個標題。
@@ -250,56 +277,130 @@ Petrick's 補選：${petLine}
 
 ④ 化簡效益
   用一句話說：化簡前要 ${steps.input_minterms.length} 個乘積項（共 ${beforeLits} 個 literal），化簡後「${sop}」只需 ${result.term_count} 個乘積項（${afterLits} 個 literal），節省了 ${savedLits} 個 literal、減少 ${savedTerms} 個乘積項。
+  若有電路節點對應最終乘積項，可用 [node:ID] 標記。
 
 最後一行只寫：最簡 SOP = ${sop}`;
   }
 
-  // ── 呼叫 Gemini API 取得白話詳解 ────────────────────────────
+  // ── 呼叫 Gemini API（共用） ──────────────────────────────────
+  async function callGemini(contents) {
+    const res = await fetch(
+      `/api/gemini/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey.trim())}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ contents }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      const msg    = data.error?.message ?? '';
+      const status = res.status;
+      if (status === 429 || /quota|rate.?limit/i.test(msg))
+        throw new Error('API 額度不足或請求過於頻繁');
+      if (/model.*not.*found|not.*support|unavailable/i.test(msg) || status === 404)
+        throw new Error('模型目前不可用');
+      throw new Error(`API 錯誤 ${status}`);
+    }
+    return data.candidates[0].content.parts[0].text;
+  }
+
+  // ── 第一次取得詳解 ───────────────────────────────────────────
   async function handleExplain() {
-    if (!apiKey.trim())     { setExplainError('請先輸入 Gemini API key'); return; }
-    if (!qmData?.qm_steps) { setExplainError('請先解一題'); return; }
+    if (!apiKey.trim())     { setChatError('請先輸入 Gemini API key'); return; }
+    if (!qmData?.qm_steps) { setChatError('請先解一題'); return; }
     if (qmData.qm_steps.prime_implicants.length === 0) {
-      setExplainError('恆 0 或恆 1 函數無需詳解');
+      setChatError('恆 0 或恆 1 函數無需詳解');
       return;
     }
 
-    setExplaining(true);
-    setExplainError('');
-    setAiExplanation('');
+    setChatLoading(true);
+    setChatError('');
+    setChatMessages([]);
+
+    const prompt = buildPrompt(qmData);
+    setSystemPrompt(prompt);
 
     try {
-      const res = await fetch(
-        `/api/gemini/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey.trim())}`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: buildPrompt(qmData) }] }],
-          }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = data.error?.message ?? '';
-        const status = res.status;
-        if (status === 429 || /quota|rate.?limit/i.test(msg)) {
-          throw new Error('AI 詳解暫時無法使用，解題與電路圖功能不受影響（原因：API 額度不足或請求過於頻繁）');
-        }
-        if (/model.*not.*found|not.*support|unavailable/i.test(msg) || status === 404) {
-          throw new Error('AI 詳解暫時無法使用，解題與電路圖功能不受影響（原因：模型目前不可用）');
-        }
-        throw new Error(`AI 詳解暫時無法使用，解題與電路圖功能不受影響（API 錯誤 ${status}）`);
-      }
-      setAiExplanation(data.candidates[0].content.parts[0].text);
+      const text = await callGemini([{ role: 'user', parts: [{ text: prompt }] }]);
+      setChatMessages([{ role: 'assistant', text }]);
     } catch (err) {
-      const msg = err.message ?? '';
-      const friendly = msg.startsWith('AI 詳解暫時無法使用')
-        ? msg
-        : `AI 詳解暫時無法使用，解題與電路圖功能不受影響（${msg}）`;
-      setExplainError(friendly);
+      setChatError(`AI 詳解暫時無法使用（${err.message}）`);
     } finally {
-      setExplaining(false);
+      setChatLoading(false);
     }
+  }
+
+  // ── 追問 ────────────────────────────────────────────────────
+  async function handleFollowUp(e) {
+    e.preventDefault();
+    const q = chatInput.trim();
+    if (!q || chatLoading) return;
+
+    const newMessages = [...chatMessages, { role: 'user', text: q }];
+    setChatMessages(newMessages);
+    setChatInput('');
+    setChatLoading(true);
+    setChatError('');
+
+    // 重建完整對話歷史送給 Gemini
+    const contents = [
+      { role: 'user',  parts: [{ text: systemPrompt }] },
+      ...chatMessages.map(m => ({
+        role:  m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.text }],
+      })),
+      { role: 'user', parts: [{ text: q }] },
+    ];
+
+    try {
+      const text = await callGemini(contents);
+      setChatMessages([...newMessages, { role: 'assistant', text }]);
+    } catch (err) {
+      setChatError(`無法取得回應（${err.message}）`);
+      // 移除剛加的 user bubble，避免假象
+      setChatMessages(chatMessages);
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
+  // ── 把 [node:ID] 解析成可點擊的 chip ─────────────────────────
+  function renderMessageText(text) {
+    const parts = [];
+    const re    = /\[node:([^\]]+)\]/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) parts.push(<span key={`t${m.index}`}>{text.slice(last, m.index)}</span>);
+      const nodeId   = m[1];
+      const isActive = highlightedNodeId === nodeId;
+      parts.push(
+        <span
+          key={`n${m.index}`}
+          onClick={() => setHighlightedNodeId(prev => prev === nodeId ? null : nodeId)}
+          title={`點擊在電路圖上高亮 ${nodeId}`}
+          style={{
+            display: 'inline-block',
+            padding: '1px 6px',
+            borderRadius: 4,
+            background: isActive ? '#3b82f6' : '#fef3c7',
+            color:      isActive ? '#fff'    : '#92400e',
+            border:     `1px solid ${isActive ? '#1d4ed8' : '#fcd34d'}`,
+            cursor:     'pointer',
+            fontFamily: 'monospace',
+            fontSize:   11,
+            fontWeight: 700,
+            verticalAlign: 'middle',
+            margin: '0 2px',
+          }}
+        >
+          {nodeId}
+        </span>
+      );
+      last = re.lastIndex;
+    }
+    if (last < text.length) parts.push(<span key="tail">{text.slice(last)}</span>);
+    return parts;
   }
 
   // ── INPUT toggle（兩邊共用同一組 inputValues）──────────────
@@ -315,6 +416,8 @@ Petrick's 補選：${petLine}
   const directGateCount = directData
     ? directData.nodes.filter(n => n.type !== 'INPUT' && n.type !== 'OUTPUT').length
     : null;
+
+  const hasChat = chatMessages.length > 0;
 
   return (
     <div style={styles.root}>
@@ -405,7 +508,7 @@ Petrick's 補選：${petLine}
         </span>
       </div>
 
-      {/* QM 中間步驟（純文字，確認資料流通，Phase 3 再美化）*/}
+      {/* QM 中間步驟 */}
       {qmData?.qm_steps && (
         <div style={{
           padding: '6px 16px', borderTop: '1px solid #e5e7eb',
@@ -440,12 +543,13 @@ Petrick's 補選：${petLine}
         </div>
       )}
 
-      {/* AI 詳解區（需要 API key；無 key 則正常使用，只是看不到詳解）*/}
+      {/* AI 詳解區（多輪對話）*/}
       {qmData?.qm_steps && (
         <div style={{
-          padding: '6px 16px', borderTop: '1px solid #e5e7eb',
+          padding: '6px 16px 8px', borderTop: '1px solid #e5e7eb',
           background: '#fffbeb', flexShrink: 0,
         }}>
+          {/* 標題列：API key + 取得詳解按鈕 */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e', flexShrink: 0 }}>
               AI 詳解
@@ -463,26 +567,101 @@ Petrick's 補選：${petLine}
             />
             <button
               onClick={handleExplain}
-              disabled={explaining || !apiKey.trim()}
+              disabled={chatLoading || !apiKey.trim()}
               style={{
                 padding: '3px 14px', borderRadius: 4, border: 'none', flexShrink: 0,
                 background: '#d97706', color: '#fff', fontSize: 12, fontWeight: 600,
-                cursor: explaining || !apiKey.trim() ? 'default' : 'pointer',
-                opacity: explaining || !apiKey.trim() ? 0.5 : 1,
+                cursor: chatLoading || !apiKey.trim() ? 'default' : 'pointer',
+                opacity: chatLoading || !apiKey.trim() ? 0.5 : 1,
               }}
-            >{explaining ? '詳解中…' : '取得詳解'}</button>
-            {explainError && (
-              <span style={{ color: '#dc2626', fontSize: 12 }}>{explainError}</span>
+            >{chatLoading && !hasChat ? '詳解中…' : hasChat ? '重新詳解' : '取得詳解'}</button>
+            {chatError && (
+              <span style={{ color: '#dc2626', fontSize: 12 }}>{chatError}</span>
             )}
           </div>
-          {aiExplanation && (
+
+          {/* 對話氣泡 */}
+          {hasChat && (
             <div style={{
-              marginTop: 6, padding: '8px 12px',
-              background: '#fffef0', borderRadius: 4, border: '1px solid #fcd34d',
-              fontSize: 13, lineHeight: 1.75, whiteSpace: 'pre-wrap',
-              maxHeight: 320, overflowY: 'auto',
+              marginTop: 6,
+              maxHeight: 260, overflowY: 'auto',
+              display: 'flex', flexDirection: 'column', gap: 6,
+              border: '1px solid #fcd34d', borderRadius: 4,
+              padding: '8px 10px', background: '#fffef0',
             }}>
-              {aiExplanation}
+              {chatMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    maxWidth: '88%',
+                  }}
+                >
+                  <div style={{
+                    padding: '6px 10px',
+                    borderRadius: msg.role === 'user'
+                      ? '12px 12px 2px 12px'
+                      : '12px 12px 12px 2px',
+                    background: msg.role === 'user' ? '#dbeafe' : '#fff',
+                    border:     msg.role === 'user' ? '1px solid #93c5fd' : '1px solid #e5e7eb',
+                    fontSize: 13, lineHeight: 1.65,
+                    whiteSpace: 'pre-wrap', color: '#1f2937',
+                  }}>
+                    {msg.role === 'assistant'
+                      ? renderMessageText(msg.text)
+                      : msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div style={{ alignSelf: 'flex-start', color: '#9ca3af', fontSize: 12, padding: '4px 8px' }}>
+                  思考中…
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+          )}
+
+          {/* 追問輸入欄（有第一次詳解後才出現）*/}
+          {hasChat && (
+            <form onSubmit={handleFollowUp} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <input
+                placeholder="繼續追問，例如：Essential PI 是怎麼判斷的？"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                disabled={chatLoading}
+                style={{
+                  flex: 1, padding: '4px 10px', borderRadius: 4,
+                  border: '1px solid #fcd34d', fontSize: 12,
+                  background: chatLoading ? '#f9fafb' : '#fff',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={chatLoading || !chatInput.trim()}
+                style={{
+                  padding: '4px 14px', borderRadius: 4, border: 'none',
+                  background: '#d97706', color: '#fff', fontSize: 12, fontWeight: 600,
+                  cursor: chatLoading || !chatInput.trim() ? 'default' : 'pointer',
+                  opacity: chatLoading || !chatInput.trim() ? 0.5 : 1,
+                  flexShrink: 0,
+                }}
+              >送出</button>
+            </form>
+          )}
+
+          {/* 高亮提示 */}
+          {highlightedNodeId && (
+            <div style={{ marginTop: 4, fontSize: 11, color: '#92400e' }}>
+              電路高亮：
+              <strong style={{ fontFamily: 'monospace' }}>{highlightedNodeId}</strong>
+
+              <span
+                onClick={() => setHighlightedNodeId(null)}
+                style={{ cursor: 'pointer', textDecoration: 'underline', color: '#b45309' }}
+              >
+                取消
+              </span>
             </div>
           )}
         </div>
@@ -497,6 +676,7 @@ Petrick's 補選：${petLine}
           signalMap={signalMapDirect}
           onInputToggle={handleInputToggle}
           isConst={null}
+          highlightedNodeId={highlightedNodeId}
         />
 
         <div style={styles.divider} />
@@ -508,6 +688,7 @@ Petrick's 補選：${petLine}
           signalMap={signalMapMinimized}
           onInputToggle={handleInputToggle}
           isConst={minimizedData ? null : isConst}
+          highlightedNodeId={highlightedNodeId}
         />
       </div>
     </div>

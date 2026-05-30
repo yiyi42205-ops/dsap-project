@@ -97,6 +97,7 @@ export default function QMCircuitPanel({
   signalMap,
   onInputToggle,
   isConst,
+  highlightedNodeId,
 }) {
   const gateCount = countGates(circuitData);
   const saved = (directGateCount != null && gateCount != null)
@@ -129,7 +130,7 @@ export default function QMCircuitPanel({
           <CircuitViewer
             circuitData={circuitData}
             signalMap={signalMap}
-            highlightedNodeId={null}
+            highlightedNodeId={highlightedNodeId ?? null}
             criticalEdgeSet={null}
             onInputToggle={onInputToggle}
           />

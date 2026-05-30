@@ -1,0 +1,89 @@
+<svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .sans{font-family:-apple-system,'Segoe UI','Noto Sans CJK TC','PingFang TC','Microsoft JhengHei',sans-serif;}
+    .mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;}
+    .edge{stroke:#8A8273;stroke-width:1.7;fill:none;}
+    .edgeD{stroke:#9A6B57;stroke-width:1.7;fill:none;stroke-dasharray:6 5;}
+    .chip{fill:#FFFFFF;stroke:#B7AE9C;stroke-width:1.4;}
+    .chipA{fill:#FCEDE7;stroke:#C75B39;stroke-width:1.9;}
+    .box{fill:#FFFFFF;stroke:#B7AE9C;stroke-width:1.5;}
+    .boxAI{fill:#ECEAE4;stroke:#9A6B57;stroke-width:1.6;stroke-dasharray:7 5;}
+    .badge{fill:#E3E9EF;stroke:#B9C6D2;stroke-width:1;}
+  </style>
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L8,4.5 L0,9 Z" fill="#8A8273"/>
+    </marker>
+    <marker id="a2d" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L8,4.5 L0,9 Z" fill="#9A6B57"/>
+    </marker>
+  </defs>
+
+  <rect x="1" y="1" width="898" height="598" rx="14" fill="#FAF7F0" stroke="#DAD3C5"/>
+  <text class="sans" x="34" y="42" font-size="20" font-weight="700" fill="#2B2B2B">系統架構　—　模擬 · 化簡 · AI 講解</text>
+  <text class="sans" x="34" y="64" font-size="12.5" fill="#6B6457">演算法保證正確；AI 單向、唯讀，只負責把答案講成白話，不參與計算。</text>
+
+  <!-- input chips -->
+  <rect class="chip" x="150" y="92" width="230" height="42" rx="10"/>
+  <text class="sans" x="265" y="118" font-size="13" font-weight="600" text-anchor="middle" fill="#2B2B2B">電路描述檔（.txt）</text>
+  <rect class="chip" x="520" y="92" width="270" height="42" rx="10"/>
+  <text class="sans" x="655" y="118" font-size="13" font-weight="600" text-anchor="middle" fill="#2B2B2B">自訂題目（minterms / 真值表）</text>
+
+  <!-- input -> engine arrows -->
+  <line class="edge" marker-end="url(#a2)" x1="245" y1="134" x2="245" y2="248"/>
+  <line class="edge" marker-end="url(#a2)" x1="640" y1="134" x2="620" y2="248"/>
+
+  <!-- engine container -->
+  <rect x="60" y="178" width="780" height="290" rx="14" fill="#F1EDE2" stroke="#D4CCBB"/>
+  <text class="mono" x="80" y="203" font-size="12.5" font-weight="700" fill="#7A7160">C++ 引擎（CLI · 核心）</text>
+
+  <!-- left column header + badges -->
+  <text class="sans" x="95" y="234" font-size="14" font-weight="700" fill="#2B2B2B">① 電路模擬</text>
+  <rect class="badge" x="195" y="221" width="70" height="18" rx="4"/>
+  <text class="mono" x="230" y="234" font-size="9.5" text-anchor="middle" fill="#3E5C76">Ch 25/26 圖</text>
+  <rect class="badge" x="272" y="221" width="66" height="18" rx="4"/>
+  <text class="mono" x="305" y="234" font-size="9.5" text-anchor="middle" fill="#3E5C76">Ch 18 Heap</text>
+
+  <!-- left chips -->
+  <rect class="chip" x="95" y="250" width="300" height="42" rx="9"/>
+  <text class="sans" x="245" y="276" font-size="13" text-anchor="middle" fill="#2B2B2B">Parser → 建 DAG</text>
+  <rect class="chip" x="95" y="308" width="300" height="42" rx="9"/>
+  <text class="sans" x="245" y="334" font-size="13" text-anchor="middle" fill="#2B2B2B">拓撲排序 BFS / DFS（含環偵測）</text>
+  <rect class="chip" x="95" y="366" width="300" height="54" rx="9"/>
+  <text class="sans" x="245" y="389" font-size="12.5" text-anchor="middle" fill="#2B2B2B">真值表（窮舉 2ⁿ）</text>
+  <text class="sans" x="245" y="408" font-size="12.5" text-anchor="middle" fill="#2B2B2B">Critical Path（Top-K · Max-Heap）</text>
+  <line class="edge" marker-end="url(#a2)" x1="245" y1="292" x2="245" y2="306"/>
+  <line class="edge" marker-end="url(#a2)" x1="245" y1="350" x2="245" y2="364"/>
+
+  <!-- right column header + badge -->
+  <text class="sans" x="470" y="234" font-size="14" font-weight="700" fill="#2B2B2B">② 邏輯化簡（QM）</text>
+  <rect class="badge" x="640" y="221" width="100" height="18" rx="4"/>
+  <text class="mono" x="690" y="234" font-size="9.5" text-anchor="middle" fill="#3E5C76">Ch 7 演算法設計</text>
+
+  <!-- right chips -->
+  <rect class="chip" x="470" y="250" width="300" height="42" rx="9"/>
+  <text class="sans" x="620" y="276" font-size="13" text-anchor="middle" fill="#2B2B2B">PI 生成 → Essential PI</text>
+  <rect class="chip" x="470" y="308" width="300" height="42" rx="9"/>
+  <text class="sans" x="620" y="334" font-size="13" text-anchor="middle" fill="#2B2B2B">Petrick's method（保證項數最少）</text>
+  <rect class="chipA" x="470" y="366" width="300" height="42" rx="9"/>
+  <text class="sans" x="620" y="392" font-size="13" font-weight="600" text-anchor="middle" fill="#2B2B2B">最簡 SOP　保證最簡答案</text>
+  <line class="edge" marker-end="url(#a2)" x1="620" y1="292" x2="620" y2="306"/>
+  <line class="edge" marker-end="url(#a2)" x1="620" y1="350" x2="620" y2="364"/>
+
+  <!-- engine -> outputs -->
+  <line class="edge" marker-end="url(#a2)" x1="245" y1="420" x2="245" y2="504"/>
+  <line class="edge" marker-end="url(#a2)" x1="540" y1="408" x2="360" y2="504"/>
+  <line class="edgeD" marker-end="url(#a2d)" x1="660" y1="408" x2="660" y2="504"/>
+  <text class="sans" x="672" y="460" font-size="10.5" fill="#9A6B57">只餵選定的 PI</text>
+
+  <!-- output boxes -->
+  <rect class="box" x="95" y="506" width="300" height="74" rx="10"/>
+  <text class="sans" x="245" y="531" font-size="13.5" font-weight="700" text-anchor="middle" fill="#2B2B2B">React 網頁視覺化</text>
+  <text class="sans" x="245" y="550" font-size="11" text-anchor="middle" fill="#6B6457">電路圖 · 拓撲動畫 · CP 高亮</text>
+  <text class="sans" x="245" y="567" font-size="11" text-anchor="middle" fill="#6B6457">化簡前後對照 · 覆蓋表 · tooltip</text>
+
+  <rect class="boxAI" x="470" y="506" width="320" height="74" rx="10"/>
+  <text class="sans" x="630" y="531" font-size="13.5" font-weight="700" text-anchor="middle" fill="#2B2B2B">AI 詳解（Gemini API）</text>
+  <text class="sans" x="630" y="550" font-size="11" text-anchor="middle" fill="#6B6457">把選定的 PI 講成白話</text>
+  <text class="sans" x="630" y="567" font-size="11" text-anchor="middle" fill="#9A6B57">唯讀 · 不參與計算 · 不重推導</text>
+</svg>
