@@ -1,5 +1,9 @@
 # 數位邏輯電路模擬器
 
+<p align="center">
+  <img src="docs/architecture.svg" alt="系統架構：模擬、化簡、AI 講解" width="760">
+</p>
+
 ## Proposal Report
 
 ### 動機與目標
@@ -117,6 +121,11 @@ Prototype 階段預計完成以下可驗證的功能：
 
 本專題從電路模擬器出發，最終擴展為一個整合「**電路模擬 + 邏輯化簡解題器**」的數位邏輯工具，搭配 React 視覺化前端。前者把電路視為 DAG、以拓撲排序決定邏輯閘的計算順序，讓使用者直接看到電路如何運作；後者讓使用者輸入任意題目，即可得到保證最簡的答案，並由 AI 產生白話詳解。
 
+<p align="center">
+  <img src="docs/full_adder_dag.svg" alt="全加器電路即 DAG，紅色為 critical path" width="680">
+  <br><em>全加器以 DAG 表示，紅色為到 Sum 的最長路徑（critical path）</em>
+</p>
+
 整個工具因此涵蓋模擬 → 分析 → 化簡 → 解題的流程，從學習用的模擬器延伸成一個能實際解題的小型工具鏈。
 
 ### 核心觀察
@@ -129,13 +138,28 @@ Prototype 階段預計完成以下可驗證的功能：
 
 關於 Petrick's 的取捨：Prototype 階段先用貪心覆蓋，在所有測試題目上都得到正確結果。但貪心是 Set Cover 的啟發式，理論上不保證項數最少，只是小規模題目很少觸發反例。為了讓「保證最簡」這個宣稱成立，Final 階段加入 Petrick's method：把剩餘未覆蓋的 minterms 用布林乘積完整展開，求出項數最少的覆蓋。貪心版保留為對照函式 `minimizeGreedy()`，可以對照啟發式解與精確最小解的差別。
 
+<p align="center">
+  <img src="docs/ai-explain.png" alt="AI 白話詳解輸出" width="760">
+  <br><em>AI 依演算法選定的 PI 產生四步白話詳解（API key 已遮去）</em>
+</p>
+
 #### 2. Critical Path：把資料結構連到實際的時脈頻率
 
 Top-K 最長路徑搜尋是本專題用到最多資料結構的地方：拓撲排序確定計算順序，DP 求每個節點的最長到達延遲，再用 Max-Heap 反向取出延遲最大的 K 條完整路徑。輸出可以直接換算成電路的最高工作頻率（全加器 critical path 3 ns → 333 MHz）。現代 CPU 的時脈設計其實也是同一個 DAG 最長路徑問題（工業界的 Static Timing Analysis 還會再處理 false path、setup/hold time、clock skew 等）。
 
+<p align="center">
+  <img src="docs/critical-path.png" alt="React 介面上 Critical Path 高亮" width="760">
+  <br><em>最長路徑在電路圖上以紅色高亮，tooltip 顯示各閘延遲</em>
+</p>
+
 ### 考題驗證
 
 以臺大電機 2021–2025 學年期中考的真值表化簡題共 5 題作為驗證集，把每題的 minterms 輸入解題器，化簡結果與標準答案全數一致。這 5 題涵蓋 3~4 個變數、含 don't care、不同的 minterm 結構，可以驗證 QM + Petrick's 在課程範圍內的正確性。
+
+<p align="center">
+  <img src="docs/make-test.png" alt="make test 全數通過" width="640">
+  <br><em><code>make test</code>：61 個測試全數通過（含 5 題考古題對照）</em>
+</p>
 
 ### 最終實作的功能
 
@@ -149,6 +173,16 @@ Top-K 最長路徑搜尋是本專題用到最多資料結構的地方：拓撲�
 | **AI 詳解（Gemini API）** | 使用者貼上自己的 Gemini API key（`localStorage` 永久儲存，只存在使用者瀏覽器），網頁直接呼叫 Gemini；prompt 嚴格綁定演算法實際選的那組答案，AI 只負責用四步骨架（全部 PI → essential 是哪些 → Petrick's 怎麼選 → 省了多少）講成白話 |
 | **化簡前後電路對照** | 同畫面並排顯示「直接展開版」與「QM 化簡版」電路圖，並標出省了幾個閘 |
 
+<p align="center">
+  <img src="docs/qm-before-after.png" alt="化簡前後電路並排對照" width="820">
+  <br><em>化簡前後並排：直接展開版 vs QM 化簡版，標出省下的閘數</em>
+</p>
+
+<p align="center">
+  <img src="docs/pi-coverage.png" alt="PI 清單與 minterm-to-PI 覆蓋表" width="760">
+  <br><em>全部 PI 與覆蓋表：★ 為 essential、○ 為 Petrick's 補選</em>
+</p>
+
 #### 輔助功能：電路模擬與分析
 
 | 功能 | 說明 |
@@ -159,6 +193,11 @@ Top-K 最長路徑搜尋是本專題用到最多資料結構的地方：拓撲�
 | 真值表生成 | 窮舉 2^n 種輸入組合，自動計算並印出 |
 | **Top-K 最長路徑分析** | DAG 最長路徑 DP（拓撲排序後 relax）+ Max-Heap 反向搜尋前 K 條路徑；輸出路徑序列與延遲總和；可用 `--critical-path K` 指定 K 值 |
 | **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、拓撲排序步進動畫（BFS / DFS）、Critical Path 高亮、hover tooltip 顯示閘的延遲與輸入／輸出值 |
+
+<p align="center">
+  <img src="docs/topo-sort.gif" alt="拓撲排序步進動畫" width="760">
+  <br><em>拓撲排序步進：節點依計算順序逐一點亮（BFS / DFS）</em>
+</p>
 
 ---
 

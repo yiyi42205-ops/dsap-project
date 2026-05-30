@@ -526,7 +526,13 @@ bool exportQMToJson(const std::string& ttPath,
         }
         j << "]}";
     }
-    j << "\n    ]\n";
+    j << "\n    ],\n";
+    j << "    \"all_minimal_sops\": [";
+    for (int i = 0; i < (int)qmResult.allMinimalSOPs.size(); i++) {
+        if (i > 0) j << ", ";
+        j << "\"" << jsonEscape(qmResult.allMinimalSOPs[i]) << "\"";
+    }
+    j << "]\n";
     j << "  },\n";
 
     // qm_steps（中間結果）
@@ -610,18 +616,24 @@ bool exportQMToStream(std::ostream& out,
         if (t > 0) j << ",\n";
         const auto& pt = qmResult.terms[t];
         j << "      {\"literals\": [";
-        bool firstLit = true;
+        bool firstLit2 = true;
         for (int i = 0; i < qmResult.numVars; i++) {
             if (!((pt.care >> i) & 1)) continue;
-            if (!firstLit) j << ", ";
-            firstLit = false;
+            if (!firstLit2) j << ", ";
+            firstLit2 = false;
             j << "\"" << jsonEscape(qmResult.varNames[i]);
             if (!((pt.polarity >> i) & 1)) j << "'";
             j << "\"";
         }
         j << "]}";
     }
-    j << "\n    ]\n";
+    j << "\n    ],\n";
+    j << "    \"all_minimal_sops\": [";
+    for (int i = 0; i < (int)qmResult.allMinimalSOPs.size(); i++) {
+        if (i > 0) j << ", ";
+        j << "\"" << jsonEscape(qmResult.allMinimalSOPs[i]) << "\"";
+    }
+    j << "]\n";
     j << "  },\n";
 
     j << "  \"qm_steps\": " << qmStepsToJson(qmResult) << ",\n";

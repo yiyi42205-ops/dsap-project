@@ -28,6 +28,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <cstdint>
+#include <climits>
 
 // ============================================================
 // 1. 公開資料結構
@@ -54,28 +55,121 @@ struct PIRecord {
 struct QMResult {
     int numVars = 0;
     std::vector<std::string> varNames;  // 長度 = numVars
-    std::vector<ProductTerm> terms;     // SOP 各乘積項
+    std::vector<ProductTerm> terms;     // SOP 各乘積項（選中的那組）
     // terms 為空          → 函數恆 0
     // terms 含 care=0 項  → 函數恆 1（此時 terms.size()==1）
 
     // 中間結果（QM 演算法步驟資訊，供外部詳解使用）
-    std::vector<int>                         inputMinterms; // 輸入的 minterms
-    std::vector<PIRecord>                    piRecords;     // 所有 PI 及選取狀態
+    std::vector<int>                         inputMinterms;  // 輸入的 minterms
+    std::vector<PIRecord>                    piRecords;      // 所有 PI 及選取狀態
     std::unordered_map<int, std::vector<int>> mintermToPIs; // minterm → PI index 清單
+    std::vector<std::string>                 allMinimalSOPs; // 所有等效最簡解（通常只有 1 個）
 };
 
 // ============================================================
 // 2. Petrick's method 覆蓋選取輔助函式（內部使用）
 // ============================================================
+
+// qm_petricksAllOptimal：回傳所有等效最佳覆蓋（Rule 1 + Rule 2 平手的全部）
+//   Rule 1：PI 個數最少
+//   Rule 2：平手時 literal 總數最少
+// 不再用 Rule 3 篩到單一解，而是把所有等效解全部回傳。
+static inline std::vector<std::vector<int>> qm_petricksAllOptimal(
+    const std::vector<int>&                          uncoveredList,
+    const std::unordered_map<int, std::vector<int>>& mintermToPIs,
+    const std::vector<bool>&                         alreadySelected,
+    const std::vector<PIRecord>&                     piRecords)
+{
+    if (uncoveredList.empty()) return {{}};
+
+    std::vector<int> ordered = uncoveredList;
+    std::sort(ordered.begin(), ordered.end());
+
+    std::vector<std::vector<int>> factors;
+    factors.reserve(ordered.size());
+    for (int m : ordered) {
+        std::vector<int> factor;
+        auto it = mintermToPIs.find(m);
+        if (it != mintermToPIs.end())
+            for (int pi : it->second)
+                if (!alreadySelected[pi]) factor.push_back(pi);
+        std::sort(factor.begin(), factor.end());
+        factors.push_back(std::move(factor));
+    }
+
+    using Cover = std::vector<int>;
+    std::vector<Cover> sop;
+    sop.reserve(factors[0].size());
+    for (int pi : factors[0]) sop.push_back({pi});
+
+    for (int fi = 1; fi < (int)factors.size(); fi++) {
+        std::vector<Cover> newSop;
+        newSop.reserve(sop.size() * factors[fi].size());
+        for (const auto& cover : sop) {
+            for (int pi : factors[fi]) {
+                Cover merged = cover;
+                auto pos = std::lower_bound(merged.begin(), merged.end(), pi);
+                if (pos == merged.end() || *pos != pi)
+                    merged.insert(pos, pi);
+                newSop.push_back(std::move(merged));
+            }
+        }
+        std::sort(newSop.begin(), newSop.end());
+        newSop.erase(std::unique(newSop.begin(), newSop.end()), newSop.end());
+        std::sort(newSop.begin(), newSop.end(),
+            [](const Cover& a, const Cover& b) {
+                return a.size() != b.size() ? a.size() < b.size() : a < b;
+            });
+        std::vector<Cover> absorbed;
+        absorbed.reserve(newSop.size());
+        for (auto& cov : newSop) {
+            bool dominated = false;
+            for (const auto& small : absorbed) {
+                if (small.size() > cov.size()) break;
+                if (std::includes(cov.begin(), cov.end(),
+                                  small.begin(), small.end())) {
+                    dominated = true; break;
+                }
+            }
+            if (!dominated) absorbed.push_back(std::move(cov));
+        }
+        sop = std::move(absorbed);
+    }
+
+    if (sop.empty()) return {};
+
+    // Rule 1：最小 PI 個數
+    int bestSize = INT_MAX;
+    for (const auto& cov : sop)
+        if ((int)cov.size() < bestSize) bestSize = (int)cov.size();
+
+    // Rule 2：最小 literal 數
+    int bestLits = INT_MAX;
+    for (const auto& cov : sop) {
+        if ((int)cov.size() != bestSize) continue;
+        int lits = 0;
+        for (int pi : cov) lits += piRecords[pi].literalCount;
+        if (lits < bestLits) bestLits = lits;
+    }
+
+    // 收集所有平手的最佳解
+    std::vector<Cover> optimal;
+    for (const auto& cov : sop) {
+        if ((int)cov.size() != bestSize) continue;
+        int lits = 0;
+        for (int pi : cov) lits += piRecords[pi].literalCount;
+        if (lits == bestLits) optimal.push_back(cov);
+    }
+    std::sort(optimal.begin(), optimal.end()); // 排序確保順序確定
+    return optimal;
+}
+
+// qm_petricksCover：回傳單一最佳解（向下相容，委派給 qm_petricksAllOptimal）
 //
-// 從仍未覆蓋的 minterms 出發，展開乘積式枚舉所有可行覆蓋，
-// 依以下三層規則選出唯一確定的最佳解：
-//
-//   規則 1：PI 個數最少（保證項數最少 = 保證最簡）
-//   規則 2：平手時，選中 PIs 的 literal 總數最少
-//            （每個 PI 的 literal 數 = numVars - popcount(implicant.mask)，
-//              已存入 PIRecord::literalCount）
-//   規則 3：仍平手時，所有選中 PIs 的覆蓋 minterms 合集（排序後）字典序最小
+// 原有的三層規則：
+//   規則 1：PI 個數最少
+//   規則 2：平手時 literal 總數最少
+//   規則 3：仍平手時，minterm 合集字典序最小（保證確定性）
 //
 // 此三層規則保證：對同一輸入，每次回傳完全相同的一組 PI 索引。
 static inline std::vector<int> qm_petricksCover(
@@ -403,6 +497,26 @@ static inline QMResult minimizeImpl(
                 uncovered.erase(m);
     };
 
+    // 將一組 PI 索引轉成 SOP 字串（格式與 qmResultToString 一致）
+    auto piIdxToSopStr = [&](const std::vector<int>& indices) -> std::string {
+        std::string s;
+        bool firstTerm = true;
+        for (int idx2 : indices) {
+            if (!firstTerm) s += " + ";
+            firstTerm = false;
+            const auto& pi2 = primeImplicants[idx2];
+            std::string term;
+            for (int bit = 0; bit < numVars; bit++) {
+                int jj = numVars - 1 - bit; // bit j 對應 varNames[numVars-1-j]
+                if ((pi2.mask >> jj) & 1) continue;
+                term += result.varNames[bit];
+                if (!((pi2.value >> jj) & 1)) term += "'";
+            }
+            s += term.empty() ? "1" : term;
+        }
+        return s.empty() ? "0" : s;
+    };
+
     // 重複掃描：找到某 uncovered minterm 只被一個未選 PI 覆蓋 → essential
     bool found = true;
     while (found && !uncovered.empty()) {
@@ -423,16 +537,29 @@ static inline QMResult minimizeImpl(
     // ── Step 6：覆蓋剩餘 minterms ────────────────────────────
     if (!uncovered.empty()) {
         if (usePetricks) {
-            // ── Petrick's method：保證最簡 ─────────────────
-            // 詳細規則見 qm_petricksCover 函式說明
+            // ── Petrick's method：收集所有等效最簡解 ───────
             std::vector<int> uncovList(uncovered.begin(), uncovered.end());
-            std::vector<int> chosen = qm_petricksCover(
+            auto allOptimal = qm_petricksAllOptimal(
                 uncovList, mintermToPIs, selected, result.piRecords);
-            for (int idx : chosen) selectPI(idx);
+
+            // 收集 essential PI 索引（Step 5 已選）
+            std::vector<int> essIdx;
+            for (int i = 0; i < numPIs; i++)
+                if (result.piRecords[i].essential) essIdx.push_back(i);
+
+            // 建立所有等效最簡 SOP 字串
+            for (const auto& cov : allOptimal) {
+                std::vector<int> fullIdx = essIdx;
+                for (int i : cov) fullIdx.push_back(i);
+                std::sort(fullIdx.begin(), fullIdx.end());
+                result.allMinimalSOPs.push_back(piIdxToSopStr(fullIdx));
+            }
+
+            // 主解：第一個（字典序最小，保證確定性）
+            if (!allOptimal.empty())
+                for (int idx : allOptimal[0]) selectPI(idx);
         } else {
             // ── 貪心法（保留供對照）────────────────────────
-            // 每次選能覆蓋最多 uncovered minterms 的未選 PI
-            // 平手時選索引最小的（保證結果確定性）
             while (!uncovered.empty()) {
                 int bestIdx = -1, bestCnt = 0;
                 for (int i = 0; i < numPIs; i++) {
@@ -445,7 +572,18 @@ static inline QMResult minimizeImpl(
                 if (bestIdx < 0) break;
                 selectPI(bestIdx);
             }
+            // 貪心只有一解
+            std::vector<int> selIdx;
+            for (int i = 0; i < numPIs; i++)
+                if (result.piRecords[i].selected) selIdx.push_back(i);
+            result.allMinimalSOPs.push_back(piIdxToSopStr(selIdx));
         }
+    } else {
+        // 只有 essential PI，唯一解
+        std::vector<int> essIdx;
+        for (int i = 0; i < numPIs; i++)
+            if (result.piRecords[i].essential) essIdx.push_back(i);
+        result.allMinimalSOPs.push_back(piIdxToSopStr(essIdx));
     }
 
     // ── Step 7：轉換為 ProductTerm ───────────────────────────

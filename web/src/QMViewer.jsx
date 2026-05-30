@@ -44,7 +44,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    overflow: 'hidden',
+    overflowY: 'auto',
     height: '100%',
   },
   infoBar: {
@@ -85,6 +85,7 @@ const styles = {
     gap: 8,
     padding: 8,
     overflow: 'hidden',
+    minHeight: 320,
   },
   divider: {
     width: 1,
@@ -187,99 +188,192 @@ export default function QMViewer() {
     }
   }
 
-  // ── 組 prompt（演算法答案全部帶入，AI 只負責講解）──────────
-  //
-  // 設計原則：
-  //   ・所有數值均由 C++ QM 演算法計算，AI 只解釋，不推導
-  //   ・固定四步骨架：① 全部 PI → ② essential PI → ③ Petrick's → ④ 化簡效益
-  //   ・每步一句結論 + 最多一句「為什麼」，全文不超過 12 句
-  //   ・術語第一次出現加最短括注，之後直接用
-  //   ・輸出語言：繁體中文（台灣用語）
-  //   ・提到電路節點時用 [node:ID] 標記，方便高亮
+  // ── 組 prompt ───────────────────────────────────────────────
   function buildPrompt(data) {
-    const result = data.qm_result;
-    const steps  = data.qm_steps;
-    const sop    = result.sop;
+    const result   = data.qm_result;
+    const steps    = data.qm_steps;
+    const sop      = result.sop;
+    const numVars  = result.num_vars;
+    const varNames = result.var_names;
 
-    // 全部 PI：單行格式，方便 AI 直接引用
-    const allPIsLine = steps.prime_implicants
-      .map(pi => `${pi.term}{${pi.minterms.join(',')}}`)
-      .join('；');
+    const toBin = n => n.toString(2).padStart(numVars, '0');
 
-    // Essential PI 清單
-    const essPIs    = steps.prime_implicants.filter(pi => pi.essential);
-    const petPIs    = steps.prime_implicants.filter(pi => pi.selected && !pi.essential);
+    // ── 重建合併過程 ─────────────────────────────────────────
+    function buildMergeSteps(pi) {
+      const minterms = pi.minterms;
 
-    const essLine = essPIs.length
-      ? essPIs.map(pi => `${pi.term}（蓋 {${pi.minterms.join(',')}}）`).join('、')
+      if (minterms.length === 1)
+        return `  ${pi.term}：m(${minterms[0]}) = ${toBin(minterms[0])}（單一 minterm，無法再合併）`;
+
+      // 若 minterms 數不是 2 的冪，表示有 don't care 參與合併
+      const isPow2 = n => n > 0 && (n & (n - 1)) === 0;
+      if (!isPow2(minterms.length)) {
+        const stableBits = Array.from({ length: numVars }, (_, i) => {
+          const vals = new Set(minterms.map(m => (m >> (numVars - 1 - i)) & 1));
+          return vals.size === 1 ? String([...vals][0]) : '-';
+        }).join('');
+        return `  ${pi.term}：m(${minterms.join(', ')})＋don't care 參與合併，最終 pattern = ${stableBits}`;
+      }
+
+      const lines = [`  ${pi.term}：m(${minterms.join(', ')})`];
+      let current = minterms.map(toBin);
+
+      for (let round = 1; current.length > 1; round++) {
+        const next = [];
+        const used = new Set();
+        for (let i = 0; i < current.length; i++) {
+          if (used.has(i)) continue;
+          for (let j = i + 1; j < current.length; j++) {
+            if (used.has(j)) continue;
+            const a = current[i], b = current[j];
+            let diffPos = -1, ok = true;
+            for (let k = 0; k < numVars; k++) {
+              if ((a[k] === '-') !== (b[k] === '-')) { ok = false; break; }
+              if (a[k] !== b[k]) { if (diffPos !== -1) { ok = false; break; } diffPos = k; }
+            }
+            if (ok && diffPos !== -1) {
+              const merged = a.split(''); merged[diffPos] = '-';
+              lines.push(`    第${round}輪：${a} ∧ ${b} → ${merged.join('')}（消去 ${varNames[diffPos]}）`);
+              next.push(merged.join(''));
+              used.add(i); used.add(j);
+              break;
+            }
+          }
+        }
+        if (!next.length) break;
+        current = next;
+      }
+      return lines.join('\n');
+    }
+
+    // ── PI 清單 ──────────────────────────────────────────────
+    const mergeSteps = steps.prime_implicants.map(buildMergeSteps).join('\n');
+
+    const piList = steps.prime_implicants.map(pi => {
+      const tag = pi.essential ? '★ Essential' : pi.selected ? '○ Petrick 補選' : '× 未選';
+      return `  [${pi.index}] ${pi.term}  蓋 {${pi.minterms.join(',')}}  ${tag}`;
+    }).join('\n');
+
+    // ── Essential PI：標出讓它「非選不可」的那個 minterm ────
+    const essPIs = steps.prime_implicants.filter(pi => pi.essential);
+    const petPIs = steps.prime_implicants.filter(pi => pi.selected && !pi.essential);
+
+    const essentialList = essPIs.length
+      ? essPIs.map(pi => {
+          const uniqueMs = pi.minterms.filter(m => {
+            const row = steps.coverage_table.find(r => r.minterm === m);
+            return row && row.pi_indices.length === 1;
+          });
+          const why = uniqueMs.length ? `（m(${uniqueMs.join(',')}) 只有它蓋得到）` : '';
+          return `${pi.term}${why}`;
+        }).join('、')
       : '無';
 
-    const petLine = petPIs.length
+    const petrickResult = petPIs.length
       ? petPIs.map(pi => `${pi.term}（蓋 {${pi.minterms.join(',')}}）`).join('、')
-      : '無（essential PI 已完整覆蓋）';
+      : '無';
 
-    // Essential PI 選完後的剩餘 minterms（交給 Petrick's 的那些）
+    // Petrick's 展開資料：各剩餘 minterm 的候選 PI
     const covByEss  = new Set(essPIs.flatMap(pi => pi.minterms));
     const remaining = steps.input_minterms.filter(m => !covByEss.has(m));
-    const remStr    = remaining.length > 0 ? `{${remaining.join(',')}}` : '（無）';
+    const petrickContext = remaining.length
+      ? remaining.map(m => {
+          const row  = steps.coverage_table.find(r => r.minterm === m);
+          const cands = row
+            ? row.pi_indices.map(idx => {
+                const p = steps.prime_implicants.find(p => p.index === idx);
+                return p ? p.term : `P${idx}`;
+              }).join(' + ')
+            : '?';
+          return `m(${m}) → (${cands})`;
+        }).join('；')
+      : '（essential 已蓋滿，無剩餘 minterm）';
 
-    // 化簡前 literal 數：每個 minterm 展開需要 num_vars 個 literal
-    const beforeLits = steps.input_minterms.length * result.num_vars;
-    // 化簡後 literal 數：從 qm_result.terms[].literals 精確加總
+    // ── 字數統計 ─────────────────────────────────────────────
     const afterLits  = result.terms.reduce((s, t) => s + t.literals.length, 0);
-    const savedLits  = Math.max(0, beforeLits - afterLits);
-    const savedTerms = Math.max(0, steps.input_minterms.length - result.term_count);
+    const beforeLits = steps.input_minterms.length * numVars;
 
-    // 電路節點 ID（化簡版）
+    // Don't care：出現在 PI minterms 但不在 input_minterms 的（保守偵測）
+    const inputSet = new Set(steps.input_minterms);
+    const dcSet    = new Set(steps.prime_implicants.flatMap(pi => pi.minterms).filter(m => !inputSet.has(m)));
+    const dontCareStr = dcSet.size ? [...dcSet].sort((a,b)=>a-b).join(', ') : '無';
+
+    // ── 電路節點對照 ─────────────────────────────────────────
     const minNodes = data.minimized_circuit?.nodes ?? [];
-    const allNodeIds = minNodes.map(n => n.id).join(', ');
+    const andNodes = minNodes.filter(n => n.type !== 'INPUT' && n.type !== 'OUTPUT' && n.type !== 'OR');
+    const orNodes  = minNodes.filter(n => n.type === 'OR');
+    const nodeMappingLines = [
+      ...andNodes.map((n, i) => {
+        const term = result.terms[i];
+        return `  ${n.id}（AND）→ 乘積項 ${term ? term.literals.join('') : '?'}`;
+      }),
+      ...orNodes.map(n => `  ${n.id}（OR）→ 最終輸出`),
+    ];
+    const nodeMapping = nodeMappingLines.length ? nodeMappingLines.join('\n') : '  （無）';
+
+    // 所有等效最簡解
+    const allSOPs = result.all_minimal_sops ?? [sop];
+    const allSOPsNote = allSOPs.length > 1
+      ? `等效最簡解（共 ${allSOPs.length} 組，學生寫出任一組均正確）：\n${allSOPs.map((s, i) => `  解 ${i + 1}：${s}`).join('\n')}`
+      : `最簡解唯一：${sop}`;
 
     return `你是數位邏輯課的教學助理。
 
-【硬性規則——違反即失格，請先讀完】
-所有式子和數字均由 Quine-McCluskey 演算法（含 Petrick's method）計算，是唯一正確答案。
-你只能「解釋」這份答案，不可自行推導、驗算，也不可提出任何替代答案。
-最簡 SOP 是「${sop}」，不可更動。若你算出不同結果，代表你算錯了，請仍以「${sop}」為準。
+【硬性規則】
+以下「演算法資料」由 Quine-McCluskey 演算法計算，是唯一正確答案。
+- 答案層（PI 清單、essential 判定、最簡 SOP、項數、literal 數、合併過程）：直接引用，不可更動。若心算結果不同，以資料為準。
+- 過程層（為什麼是 PI、為什麼 essential、Petrick 怎麼展開）：必須具體解釋步驟，不可用「演算法規則」搪塞。
+- 若學生答案出現在等效最簡解清單，承認正確並解釋為何並列成立。
 輸出語言：繁體中文（台灣用語）。
 
-【演算法資料（ground truth，禁止修改）】
-變數：${result.var_names.join(', ')}
+${allSOPsNote}
+
+【演算法資料】
+變數：${varNames.join(', ')}
 輸入 minterms：${steps.input_minterms.join(', ')}
-全部 PI（共 ${steps.prime_implicants.length} 個）：${allPIsLine}
-Essential PI：${essLine}
-Petrick's 補選：${petLine}
-最簡 SOP：${sop}（${result.term_count} 個乘積項，${afterLits} 個 literal）
+Don't care：${dontCareStr}
+合併過程：
+${mergeSteps}
+全部 PI（${steps.prime_implicants.length} 個）：
+${piList}
+Essential PI：${essentialList}
+Petrick's 補選：${petrickResult}
+Petrick's 展開資料：${petrickContext}
+最簡 SOP：${sop}
+項數：${result.term_count}，literal 數：${afterLits}
+化簡前項數：${steps.input_minterms.length}，literal 數：${beforeLits}
 
-【電路節點（化簡版電路，可供學生高亮查看）】
-節點 ID 清單：${allNodeIds}
-在解釋中，當你提到某個具體的閘或節點時，請用 [node:節點ID] 標記，例如「[node:AND_t0] 負責計算乘積項 AB」。
-學生點擊這個標記後，對應的閘會在電路圖上高亮顯示。
+【電路節點】
+${nodeMapping}
+提到具體閘時用 [node:節點ID] 標記。
 
-【輸出格式——嚴格照做，不得擅自增加內容】
-依序輸出四個步驟，每步一個標題。
-每步：第一句是一句白話重點結論，第二句（選填）補一句「為什麼」。每步最多三句。
-全文不超過 12 句、350 字。
-術語第一次出現加最短括注，例如「essential PI（某 minterm 只有它蓋得到，非選不可）」，之後直接用。
+【首次回答格式】
+四步，每步一句白話結論＋（選填）一句「為什麼」，最多三句，全文 ≤ 350 字。
+最後一行：最簡 SOP = ${sop}
 
-① Prime Implicants（質主項）是什麼
-  用一句話說清楚：共幾個 PI，它們各覆蓋哪些 minterms。
-  可補一句：舉最典型的一兩個例子，說明是哪幾個 minterm 合併、消去了哪個變數。
-
-② Essential PI 為什麼非選不可
-  用一句話說：哪些是 essential PI，為什麼（覆蓋表中某 minterm 只被它蓋到，非選不可）。
-  可補一句：這些 essential PI 合起來蓋了哪些 minterm。
-  若 essLine 為「無」，說「本題無 essential PI，全部由 Petrick's 決定」。
-
+① Prime Implicants 是什麼——挑 1~2 個 PI 用合併過程說明它從哪些 minterm 來
+② Essential PI 為什麼非選不可——點出哪個 minterm 只有它能蓋
 ③ Petrick's method 怎麼選到項數最少
-  用一句話說：essential PI 選完後，剩餘 minterms ${remStr} 由 Petrick's 從候選 PI 中選出「${petLine}」，這樣保證項數最少。
-  可補一句：Petrick's 展開所有可能的覆蓋組合，挑項數最少的那組，所以結果保證最簡。
-  若 remStr 為「（無）」，說「essential PI 已完整覆蓋，Petrick's 不需補選」。
+   - 若「${petrickResult}」為「無」：說明 essential 已蓋滿、不需要 Petrick，並用一句話示意 Petrick 的作用
+   - 若有補選：用 Petrick's 展開資料列出各 minterm 的候選 PI、AND 起來、挑乘積項最少的那組，結果是「${petrickResult}」
+④ 化簡效益：一句話說節省了幾項、幾個 literal
 
-④ 化簡效益
-  用一句話說：化簡前要 ${steps.input_minterms.length} 個乘積項（共 ${beforeLits} 個 literal），化簡後「${sop}」只需 ${result.term_count} 個乘積項（${afterLits} 個 literal），節省了 ${savedLits} 個 literal、減少 ${savedTerms} 個乘積項。
-  若有電路節點對應最終乘積項，可用 [node:ID] 標記。
+【追問】
+追問時放掉四步格式，直接針對問題回答。
+- 答案層數字以 ground truth 為準；過程層可舉例展開
+- 學生說「沒看懂」：先問哪步卡住，或直接用本題數字展開那步，不要重講四步全部
+- 不要主動貼最簡 SOP，只在學生要結論時貼
+- 只回答與「本題化簡過程、數位邏輯概念、課本章節」有關的問題：
+  - 與題目無關（生活、其他科目）→ 一句話說明你是化簡助理，請對方換題相關問題
+  - 數位邏輯範圍但資料不足（K-map、POS、其他電路）→ 可解釋概念，但說明「本工具只到 SOP 化簡，其他形式請手算或另工具驗證」，不編造數字
+  - 質疑答案（「老師說是 X」）→ 不動搖；項數相同引導對照等效解清單，項數不同建議重查 minterms
 
-最後一行只寫：最簡 SOP = ${sop}`;
+【Petrick's method 展開模板——觸發時照這個講】
+1. 對每個未被 essential 覆蓋的 minterm，列出能蓋它的 PI：m_i → (P_a + P_b + ...)
+2. 全部 AND 起來：(P_a + P_b)(P_c + P_d)...
+3. 用分配律乘開、吸收律化簡
+4. 挑乘積項數最少（平手時挑 literal 最少）的那一項
+5. 該項裡的 PI 就是補選的 PI`;
   }
 
   // ── 呼叫 Gemini API（共用） ──────────────────────────────────
@@ -521,13 +615,16 @@ Petrick's 補選：${petLine}
             {qmData.qm_steps.prime_implicants.length} 個 PI，
             input minterms: [{qmData.qm_steps.input_minterms.join(', ')}]
           </span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 20px', marginTop: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 3 }}>
             {qmData.qm_steps.prime_implicants.map(pi => {
               const tag  = pi.essential ? '★ Ess' : pi.selected ? '○ Petrick\'s' : '× 未選';
               const color = pi.essential ? '#1d4ed8' : pi.selected ? '#15803d' : '#9ca3af';
+              const mergedFrom = pi.minterms.length > 1
+                ? ` ← m(${pi.minterms.join(', ')}) 合併`
+                : ` ← m(${pi.minterms[0]})`;
               return (
                 <span key={pi.index} style={{ color }}>
-                  [{pi.index}]{pi.term} m({pi.minterms.join(',')}) {tag}
+                  [{pi.index}] {pi.term.padEnd(12)}{mergedFrom}　{tag}
                 </span>
               );
             })}
