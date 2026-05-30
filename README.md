@@ -121,6 +121,11 @@ Prototype 階段預計完成以下可驗證的功能：
 
 本專題從電路模擬器出發，最終擴展為一個整合「**電路模擬 + 邏輯化簡解題器**」的數位邏輯工具，搭配 React 視覺化前端。前者把電路視為 DAG、以拓撲排序決定邏輯閘的計算順序，讓使用者直接看到電路如何運作；後者讓使用者輸入任意題目，即可得到保證最簡的答案，並由 AI 產生白話詳解。
 
+<p align="center">
+  <img src="docs/full_adder_dag.svg" alt="全加器電路即 DAG，紅色為 critical path" width="680">
+  <br><em>全加器以 DAG 表示，紅色為到 Sum 的最長路徑（critical path）</em>
+</p>
+
 整個工具因此涵蓋模擬 → 分析 → 化簡 → 解題的流程，從學習用的模擬器延伸成一個能實際解題的小型工具鏈。
 
 ### 核心觀察
@@ -135,7 +140,7 @@ Prototype 階段預計完成以下可驗證的功能：
 
 <p align="center">
   <img src="docs/ai-explain.png" alt="AI 白話詳解輸出" width="760">
-  <br><em>AI 依演算法選定的 PI 產生四步白話詳解（API key 已遮去）</em>
+  <br><em>AI 依演算法選定的 PI 產生四步白話詳解 </em>
 </p>
 
 #### 2. Critical Path：把資料結構連到實際的時脈頻率
@@ -196,7 +201,7 @@ make test     # 執行所有 unit tests(61 個測試,含 QM/Petrick's 對照)
 ```bash
 cd web
 npm install
-npm run dev     # 開啟 http://localhost:5173
+npm run dev   
 ```
 
 頁面提供兩個分頁：
