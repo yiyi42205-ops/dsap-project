@@ -176,7 +176,7 @@ Top-K 最長路徑搜尋是本專題用到最多資料結構的地方：拓撲�
 | **React 網頁視覺化** | React + Vite + React Flow，支援電路選擇、INPUT 切換 + 訊號傳播、拓撲排序步進動畫（BFS / DFS）、Critical Path 高亮、hover tooltip 顯示閘的延遲與輸入／輸出值 |
 
 <p align="center">
-  <img src="docs/topo-sort.gif" alt="拓撲排序步進動畫" width="760">
+  <img src="docs/topo-sort.png" alt="拓撲排序步進動畫" width="760">
   <br><em>拓撲排序步進：節點依計算順序逐一點亮（BFS / DFS）</em>
 </p>
 
