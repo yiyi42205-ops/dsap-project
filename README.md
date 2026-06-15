@@ -1,4 +1,4 @@
-# 數位邏輯工具（mini-EDA）：模擬 · 時序分析 · 邏輯化簡
+# 數位邏輯電路模擬器
 
 <p align="center">
   <img src="docs/architecture.svg" alt="系統架構：模擬、化簡、AI 講解" width="760">
@@ -12,7 +12,7 @@
 
 **技術核心**：DAG、拓撲排序（Kahn's BFS／三色標記 DFS）、最長路徑 DP + Max-Heap、QM／Petrick's、OOP 繼承與多型。
 
-**驗證**：以臺大電機 2021–2025 學年期中考的化簡題+ 61 個單元測試。
+**驗證**：交換電路與邏輯設計 2021–2025 學年期中考的化簡題+ 61 個單元測試。
 
 **技術棧**：C++17（核心引擎、CLI）、React + Vite + React Flow（視覺化前端）。
 
